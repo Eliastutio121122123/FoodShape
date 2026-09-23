@@ -1,0 +1,7 @@
+{
+  "name": "foodshape",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
