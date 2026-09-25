@@ -1,0 +1,10 @@
+node_modules
+.angular
+.git
+.ionic
+www
+dist
+coverage
+npm-debug.log
+Dockerfile
+compose.yaml
