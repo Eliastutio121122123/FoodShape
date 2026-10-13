@@ -1,0 +1,16 @@
+@FoodShare.Api_HostAddress = http://localhost:8080
+
+GET {{FoodShare.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{FoodShare.Api_HostAddress}}/health/database
+Accept: application/json
+
+###
+
+GET {{FoodShare.Api_HostAddress}}/api/donations/available
+Accept: application/json
+
+###

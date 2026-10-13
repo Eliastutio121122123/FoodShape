@@ -1,0 +1,47 @@
+<ion-content [fullscreen]="true">
+<main class="landing">
+  <nav class="landing-nav">
+    <a class="brand" routerLink="/"><span class="brand-mark">⌁</span>FoodShare</a>
+    <div class="nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#roles">Para quién es</a><a href="#impacto">Impacto</a><a href="#preguntas">Preguntas</a></div>
+    <a class="button small secondary" routerLink="/login">Iniciar sesión</a>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-copy">
+      <span class="eyebrow">Plataforma de donación</span>
+      <h1>La comida que sobra puede <em>hacer falta.</em></h1>
+      <p>Conectamos alimentos aptos para consumo con organizaciones que los necesitan.</p>
+      <div class="hero-actions"><a class="button" routerLink="/register">Únete a FoodShare</a><a class="text-link" href="#como-funciona">Conoce cómo funciona →</a></div>
+    </div>
+    <div class="hero-illustration" aria-label="Ilustración de una donación de alimentos">
+      <span class="tag tag-a">Restaurantes</span><span class="tag tag-b">Supermercados</span><span class="tag tag-c">Comunidades</span>
+      <div class="halo"></div><div class="food-box"><span>● ● ●</span><strong>♥</strong></div><div class="person person-left"></div><div class="person person-right"></div>
+    </div>
+  </section>
+
+  <section class="purpose" id="impacto">“Transformamos alimentos que podrían desperdiciarse <span>en oportunidades para ayudar.</span>”</section>
+  <section class="meaning" id="como-funciona">
+    <article><b class="orange">●</b><h2>Food = alimentos</h2><p>Comida en buen estado que hoy termina en la basura.</p></article>
+    <article><b class="green">◒</b><h2>Share = compartir</h2><p>Transformar el excedente en una oportunidad.</p></article>
+    <article><b class="red">♥</b><h2>Propósito</h2><p>Conectar a quien dona con quien lo necesita.</p></article>
+  </section>
+
+  <section class="section intro" id="como-funciona">
+    <span class="eyebrow">Así de sencillo</span><h2>Una red que convierte excedentes <em>en ayuda real.</em></h2><p>FoodShare acompaña cada paso, desde la publicación hasta la confirmación de la entrega.</p>
+    <div class="steps-grid"><article><span>01</span><b>Publica</b><p>Restaurantes, supermercados y hoteles publican alimentos disponibles.</p></article><article><span>02</span><b>Conecta</b><p>Las organizaciones beneficiarias encuentran y solicitan donaciones cercanas.</p></article><article><span>03</span><b>Entrega</b><p>Una persona voluntaria recoge, entrega y confirma que la ayuda llegó.</p></article></div>
+  </section>
+
+  <section class="impact-grid" id="impacto"><div><span class="eyebrow">Impacto que se puede ver</span><h2>Cada donación cuenta una historia de comunidad.</h2><p>Seguimos el recorrido de cada alimento para dar visibilidad a quienes hacen posible el cambio.</p><a class="text-link" routerLink="/register">Quiero ser parte →</a></div><div class="numbers"><article><strong>+1,200</strong><span>kg de alimento recuperado*</span></article><article><strong>86</strong><span>organizaciones activas*</span></article><article><strong>58</strong><span>voluntarios conectados*</span></article><small>*Datos de demostración para la interfaz.</small></div></section>
+
+  <section class="section roles" id="roles"><span class="eyebrow">Todos tenemos un lugar</span><h2>FoodShare se adapta a tu forma de ayudar.</h2><div class="role-cards"><article><div class="role-icon donor">▣</div><h3>Donantes</h3><p>Convierte alimentos disponibles en oportunidades para tu comunidad.</p><span>Publica y gestiona donaciones</span></article><article><div class="role-icon beneficiary">⌂</div><h3>Beneficiarias</h3><p>Encuentra donaciones cercanas para impulsar tu misión.</p><span>Solicita alimentos disponibles</span></article><article><div class="role-icon volunteer">⌖</div><h3>Voluntariado</h3><p>Haz que la ayuda llegue a donde más se necesita.</p><span>Apoya en recogidas y entregas</span></article></div><a class="button small role-cta" routerLink="/register">Crear una cuenta para participar</a></section>
+
+  <section class="section safety"><div class="safety-illustration"><span>✓</span><span>⌂</span><span>♥</span></div><div><span class="eyebrow">Una red de confianza</span><h2>Conexiones responsables, donaciones seguras.</h2><p>Las organizaciones se verifican antes de operar y cada entrega queda registrada para mantener un proceso claro para todos.</p><ul><li>Organizaciones verificadas</li><li>Seguimiento de recogida y entrega</li><li>Historial de donaciones e impacto</li></ul></div></section>
+
+  <section class="testimonials"><span class="eyebrow">Una comunidad que crece</span><h2>Pequeñas acciones, grandes cambios.</h2><div><article><p>“Ahora podemos encontrar donaciones de una manera más organizada y cercana.”</p><b>Organización beneficiaria</b></article><article><p>“Dar salida a nuestros excedentes es más fácil cuando sabemos a dónde llegan.”</p><b>Organización donante</b></article><article><p>“Cada ruta es una oportunidad de aportar algo importante.”</p><b>Voluntario</b></article></div><small>Testimonios de ejemplo para el diseño.</small></section>
+
+  <section class="faq" id="preguntas"><span class="eyebrow">Preguntas frecuentes</span><h2>Todo lo necesario para comenzar.</h2><details><summary>¿Quién puede usar FoodShare?</summary><p>Organizaciones donantes, organizaciones beneficiarias y personas voluntarias.</p></details><details><summary>¿FoodShare vende alimentos?</summary><p>No. FoodShare facilita procesos de donación, recogida y entrega de alimentos.</p></details><details><summary>¿Cómo se controla el proceso?</summary><p>Las donaciones, solicitudes y entregas tienen estados visibles y un historial de seguimiento.</p></details></section>
+
+  <section class="final-cta"><div><span class="eyebrow">Comienza hoy</span><h2>Comparte alimentos.<br><em>Multiplica oportunidades.</em></h2></div><a class="button" routerLink="/register">Crear una cuenta</a></section>
+  <footer><a class="brand" routerLink="/"><span class="brand-mark">⌁</span>FoodShare</a><p>Una plataforma para compartir, conectar y transformar.</p><div><a href="#como-funciona">Cómo funciona</a><a href="#roles">Perfiles</a><a routerLink="/login">Iniciar sesión</a></div><small>© 2026 FoodShare · Proyecto académico</small></footer>
+</main>
+</ion-content>

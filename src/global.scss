@@ -34,4 +34,9 @@
 
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
 /* @import "@ionic/angular/css/palettes/dark.class.css"; */
-@import '@ionic/angular/css/palettes/dark.system.css';
+/* FoodShare utiliza su propia paleta clara y no adopta el modo oscuro del sistema. */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+html, body, ion-app, ion-router-outlet { min-height: 100%; }
+body { font-family: 'Poppins', Arial, sans-serif; }
