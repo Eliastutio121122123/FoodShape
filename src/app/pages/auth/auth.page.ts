@@ -1,7 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, NavigationEnd, Router, RouterLink } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 import { AppRole, AuthService } from '../../services/auth.service';
 
@@ -18,9 +18,9 @@ const rncPattern = /^\d{3}-?\d{5}-?\d$/;
 })
 export class AuthPage {
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
   private readonly formBuilder = inject(FormBuilder).nonNullable;
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly isRegister = toSignal(
     this.router.events.pipe(
@@ -32,19 +32,22 @@ export class AuthPage {
   readonly selectedRole = signal<RegistrationRole | null>(null);
   readonly submitted = signal(false);
   readonly loginError = signal('');
+  readonly googleError = signal('');
   readonly registrationMessage = signal('');
+  readonly registrationError = signal('');
 
   readonly loginForm = this.formBuilder.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(8)]],
-    role: ['donor' as AppRole, Validators.required],
   });
   readonly donorForm = this.formBuilder.group({
     organizationName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(150)]],
     rnc: ['', [Validators.required, Validators.pattern(rncPattern)]],
     email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
     phone: ['', [Validators.required, Validators.pattern(phonePattern)]],
     address: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(250)]],
+    city: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
     representativeName: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(150)]],
   });
   readonly beneficiaryForm = this.formBuilder.group({
@@ -53,13 +56,16 @@ export class AuthPage {
     otherInstitutionType: [''],
     rnc: ['', Validators.pattern(rncPattern)],
     email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
     phone: ['', [Validators.required, Validators.pattern(phonePattern)]],
     address: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(250)]],
+    city: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
     representativeName: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(150)]],
   });
   readonly volunteerForm = this.formBuilder.group({
     fullName: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(150)]],
     email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
     phone: ['', [Validators.required, Validators.pattern(phonePattern)]],
     transportType: ['', Validators.required],
     otherTransportType: [''],
@@ -67,28 +73,45 @@ export class AuthPage {
     volunteerAgreement: [false, Validators.requiredTrue],
   });
 
+  constructor() {
+    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.handleAuthCallback());
+  }
+
+  ngOnInit(): void { this.handleAuthCallback(); }
+
   selectRole(role: RegistrationRole): void { this.selectedRole.set(role); this.submitted.set(false); }
   resetRole(): void { this.selectedRole.set(null); this.submitted.set(false); this.registrationMessage.set(''); }
   submitLogin(): void {
     this.loginError.set('');
     this.submit(this.loginForm);
     if (this.loginForm.invalid) return;
-    const { email, role } = this.loginForm.getRawValue();
-    if (role === 'donor' || role === 'beneficiary') {
-      const status = this.auth.organizationAccess(email, role);
-      if (status !== 'approved') {
-        this.loginError.set(status === 'pending'
-          ? 'Tu organización está pendiente de verificación por administración.'
-          : status === 'rejected'
-            ? 'La solicitud fue rechazada. Contacta a FoodShare para revisar los datos antes de volver a solicitar.'
-            : 'No encontramos una solicitud aprobada para este correo. Registra tu organización primero.');
-        return;
+    const { email, password } = this.loginForm.getRawValue();
+    this.auth.login(email, password).subscribe({
+      next: (result) => {
+        this.auth.signIn(result.email, result.role);
+        void this.router.navigateByUrl(this.rolePath(result.role));
+      },
+      error: (error: { status?: number; message?: string }) => {
+        this.loginError.set(error.status === 400 || error.status === 401
+          ? 'Correo o contrasena incorrectos, o el perfil esta pendiente de aprobacion.'
+          : error.message || 'No se pudo conectar con Supabase. Revisa la configuracion e intentalo de nuevo.');
       }
-    }
-    this.auth.signIn(email, role);
-    const destination = this.rolePath(role);
-    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-    void this.router.navigateByUrl(returnUrl?.startsWith('/app/') && returnUrl === destination ? returnUrl : destination);
+    });
+  }
+
+  loginWithGoogle(): void {
+    this.googleError.set('');
+    void this.auth.loginWithGoogle().catch((error: Error) => this.googleError.set(error.message || 'No se pudo iniciar sesion con Google.'));
+  }
+
+  private handleAuthCallback(): void {
+    if (!window.location.hash.includes('access_token') && !window.location.search.includes('code=')) return;
+    void this.auth.refreshSession().then((session) => {
+      if (session) void this.router.navigateByUrl(this.rolePath(session.role));
+      else this.googleError.set('La cuenta de Google todavía no tiene un perfil activo en FoodShare.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    });
   }
 
   private rolePath(role: AppRole): string {
@@ -97,37 +120,38 @@ export class AuthPage {
 
   submitRegistration(role: RegistrationRole): void {
     this.registrationMessage.set('');
+    this.registrationError.set('');
     let form: typeof this.donorForm | typeof this.beneficiaryForm | typeof this.volunteerForm;
-    let email: string;
     if (role === 'beneficiary') {
       this.setOtherValidation(this.beneficiaryForm.controls.otherInstitutionType, this.beneficiaryForm.controls.institutionType.value === 'other');
       form = this.beneficiaryForm;
-      email = this.beneficiaryForm.controls.email.value;
     } else if (role === 'volunteer') {
       this.setOtherValidation(this.volunteerForm.controls.otherTransportType, this.volunteerForm.controls.transportType.value === 'other');
       form = this.volunteerForm;
-      email = this.volunteerForm.controls.email.value;
     } else {
       form = this.donorForm;
-      email = this.donorForm.controls.email.value;
     }
     this.submit(form);
     if (form.invalid) return;
 
-    if (role === 'volunteer') {
-      this.auth.signIn(email, role);
-      void this.router.navigateByUrl(this.rolePath(role));
-      return;
-    }
-
+    let payload: import('../../services/auth.service').RegistrationPayload;
     if (role === 'donor') {
       const profile = this.donorForm.getRawValue();
-      this.auth.registerOrganization({ role, email, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, representativeName: profile.representativeName });
-    } else {
+      payload = { role, email: profile.email, password: profile.password, fullName: profile.representativeName, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, city: profile.city };
+    } else if (role === 'beneficiary') {
       const profile = this.beneficiaryForm.getRawValue();
-      this.auth.registerOrganization({ role, email, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, representativeName: profile.representativeName, profileType: profile.institutionType === 'other' ? profile.otherInstitutionType : profile.institutionType });
+      const institutionTypes: Record<string, string> = { community_dining: 'Comedor comunitario', foundation: 'Fundación', ngo: 'ONG', food_bank: 'Banco de alimentos' };
+      payload = { role, email: profile.email, password: profile.password, fullName: profile.representativeName, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, city: profile.city, profileType: profile.institutionType === 'other' ? profile.otherInstitutionType : institutionTypes[profile.institutionType] };
+    } else {
+      const profile = this.volunteerForm.getRawValue();
+      payload = { role, email: profile.email, password: profile.password, fullName: profile.fullName, phone: profile.phone, transportType: profile.transportType, otherTransportType: profile.otherTransportType, availabilityZone: profile.availabilityZone, agreementAccepted: profile.volunteerAgreement };
     }
-    this.registrationMessage.set('Solicitud enviada. Podrás iniciar sesión cuando administración verifique tu organización.');
+    this.auth.registerAccount(payload).subscribe({
+      next: (result) => this.registrationMessage.set(result.status === 'pending'
+        ? 'Registro guardado. Podras iniciar sesion cuando administracion verifique la institucion.'
+        : 'Registro guardado. Revisa tu correo y luego inicia sesion.'),
+      error: (error: Error) => this.registrationError.set(error.message || 'No se pudo guardar el registro en Supabase.'),
+    });
   }
 
   isInvalid(controlName: string, form: 'login' | 'donor' | 'beneficiary' | 'volunteer'): boolean {

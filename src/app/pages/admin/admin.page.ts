@@ -17,6 +17,12 @@ export class AdminPage {
   readonly section = signal<AdminSection>('dashboard');
   readonly menuOpen = signal(false);
 
+  constructor() {
+    this.auth.loadPendingOrganizations().subscribe({
+      next: (applications) => this.auth.setPendingOrganizations(applications),
+    });
+  }
+
   select(section: AdminSection): void {
     this.section.set(section);
     this.menuOpen.set(false);
@@ -26,6 +32,12 @@ export class AdminPage {
     this.menuOpen.update((open) => !open);
   }
 
-  approveOrganization(id: string): void { this.auth.reviewOrganization(id, 'approved'); }
-  rejectOrganization(id: string): void { this.auth.reviewOrganization(id, 'rejected'); }
+  approveOrganization(id: string): void { this.reviewOrganization(id, 'approved'); }
+  rejectOrganization(id: string): void { this.reviewOrganization(id, 'rejected'); }
+
+  private reviewOrganization(id: string, status: 'approved' | 'rejected'): void {
+    this.auth.reviewOrganization(id, status).subscribe({
+      next: () => this.auth.removePendingOrganization(id),
+    });
+  }
 }
