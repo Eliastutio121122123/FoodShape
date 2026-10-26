@@ -33,6 +33,10 @@
  */
 
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
+
+.workspace > header > button.avatar { border: 0; cursor: pointer; }
+.admin-shell .profile > div, .donor-shell .profile > div, .volunteer-shell .profile > div { min-width: 0; }
+.admin-shell .profile strong, .donor-shell .profile strong, .volunteer-shell .profile strong, .beneficiary-sidebar .sidebar-profile strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* @import "@ionic/angular/css/palettes/dark.class.css"; */
 /* FoodShare utiliza su propia paleta clara y no adopta el modo oscuro del sistema. */
 

@@ -17,7 +17,7 @@
         <button [class.active]="section() === 'history'" (click)="select('history')"><i>◷</i> Historial</button>
       </nav>
       <div class="sidebar-card"><span>♧</span><strong>¿Necesitas ayuda?</strong><p>Consulta cómo publicar y coordinar tus donaciones.</p><button>Ver guía →</button></div>
-      <button class="profile"><span>MR</span><div><strong>María Rodríguez</strong><small>Administradora</small></div><b>⌄</b></button>
+      <button class="profile" (click)="openProfile()"><span>{{ (session()?.email || 'FS').slice(0, 1).toUpperCase() }}</span><div><strong>{{ session()?.email || 'Mi cuenta' }}</strong><small>Mi perfil · Donante</small></div><b>⌄</b></button>
     </aside>
 
     <section class="main-area">

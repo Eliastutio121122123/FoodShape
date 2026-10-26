@@ -33,6 +33,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/volunteer/volunteer.page').then((m) => m.VolunteerPage),
   },
   {
+    path: 'app/profile',
+    canActivate: [roleGuard],
+    loadComponent: () => import('./pages/profile/profile.page').then((m) => m.ProfilePage),
+  },
+  {
     path: 'app/:role',
     canActivate: [roleGuard],
     loadComponent: () => import('./pages/workspace/workspace.page').then((m) => m.WorkspacePage),

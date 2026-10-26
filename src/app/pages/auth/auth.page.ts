@@ -35,6 +35,8 @@ export class AuthPage {
   readonly googleError = signal('');
   readonly registrationMessage = signal('');
   readonly registrationError = signal('');
+  readonly organizationCategories = signal<import('../../services/auth.service').OrganizationCategory[]>([]);
+  readonly catalogError = signal('');
 
   readonly loginForm = this.formBuilder.group({
     email: ['', [Validators.required, Validators.email]],
@@ -49,6 +51,7 @@ export class AuthPage {
     address: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(250)]],
     city: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
     representativeName: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(150)]],
+    institutionType: ['', Validators.required],
   });
   readonly beneficiaryForm = this.formBuilder.group({
     organizationName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(150)]],
@@ -78,7 +81,10 @@ export class AuthPage {
       .subscribe(() => this.handleAuthCallback());
   }
 
-  ngOnInit(): void { this.handleAuthCallback(); }
+  ngOnInit(): void {
+    this.handleAuthCallback();
+    this.auth.loadOrganizationCategories().subscribe({ next: (items) => this.organizationCategories.set(items), error: (error: Error) => this.catalogError.set(error.message || 'No se pudieron cargar los tipos de organizacion.') });
+  }
 
   selectRole(role: RegistrationRole): void { this.selectedRole.set(role); this.submitted.set(false); }
   resetRole(): void { this.selectedRole.set(null); this.submitted.set(false); this.registrationMessage.set(''); }
@@ -90,7 +96,7 @@ export class AuthPage {
     this.auth.login(email, password).subscribe({
       next: (result) => {
         this.auth.signIn(result.email, result.role);
-        void this.router.navigateByUrl(this.rolePath(result.role));
+        void this.router.navigateByUrl('/app/profile');
       },
       error: (error: { status?: number; message?: string }) => {
         this.loginError.set(error.status === 400 || error.status === 401
@@ -108,14 +114,10 @@ export class AuthPage {
   private handleAuthCallback(): void {
     if (!window.location.hash.includes('access_token') && !window.location.search.includes('code=')) return;
     void this.auth.refreshSession().then((session) => {
-      if (session) void this.router.navigateByUrl(this.rolePath(session.role));
+      if (session) void this.router.navigateByUrl('/app/profile');
       else this.googleError.set('La cuenta de Google todavía no tiene un perfil activo en FoodShare.');
       window.history.replaceState({}, document.title, window.location.pathname);
     });
-  }
-
-  private rolePath(role: AppRole): string {
-    return role === 'admin' ? '/app/admin' : `/app/${role}`;
   }
 
   submitRegistration(role: RegistrationRole): void {
@@ -137,11 +139,11 @@ export class AuthPage {
     let payload: import('../../services/auth.service').RegistrationPayload;
     if (role === 'donor') {
       const profile = this.donorForm.getRawValue();
-      payload = { role, email: profile.email, password: profile.password, fullName: profile.representativeName, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, city: profile.city };
+      payload = { role, email: profile.email, password: profile.password, fullName: profile.representativeName, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, city: profile.city, profileType: profile.institutionType };
     } else if (role === 'beneficiary') {
       const profile = this.beneficiaryForm.getRawValue();
       const institutionTypes: Record<string, string> = { community_dining: 'Comedor comunitario', foundation: 'Fundación', ngo: 'ONG', food_bank: 'Banco de alimentos' };
-      payload = { role, email: profile.email, password: profile.password, fullName: profile.representativeName, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, city: profile.city, profileType: profile.institutionType === 'other' ? profile.otherInstitutionType : institutionTypes[profile.institutionType] };
+      payload = { role, email: profile.email, password: profile.password, fullName: profile.representativeName, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, city: profile.city, profileType: profile.institutionType === 'other' ? profile.otherInstitutionType : profile.institutionType };
     } else {
       const profile = this.volunteerForm.getRawValue();
       payload = { role, email: profile.email, password: profile.password, fullName: profile.fullName, phone: profile.phone, transportType: profile.transportType, otherTransportType: profile.otherTransportType, availabilityZone: profile.availabilityZone, agreementAccepted: profile.volunteerAgreement };

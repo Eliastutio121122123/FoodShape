@@ -8,7 +8,7 @@
       <nav><button [class.active]="section() === 'dashboard'" (click)="select('dashboard')"><i>⌂</i> Inicio</button><button [class.active]="section() === 'deliveries'" (click)="select('deliveries')"><i>⌖</i> Mis entregas <b>3</b></button><button [class.active]="section() === 'history'" (click)="select('history')"><i>◷</i> Historial</button></nav>
       <div class="availability"><div><span>Disponibilidad</span><label><input type="checkbox" checked /><i></i></label></div><strong>Estás disponible</strong><p>Recibirás alertas de entregas cercanas.</p></div>
       <div class="sidebar-card"><span>♥</span><strong>Tu ayuda importa</strong><p>Cada entrega conecta alimentos con quienes los necesitan.</p></div>
-      <button class="profile"><span>LV</span><div><strong>Luis Vera</strong><small>Mi perfil</small></div><b>⌄</b></button>
+      <button class="profile" (click)="openProfile()"><span>{{ (session()?.email || 'FS').slice(0, 1).toUpperCase() }}</span><div><strong>{{ session()?.email || 'Mi cuenta' }}</strong><small>Mi perfil · Voluntariado</small></div><b>⌄</b></button>
     </aside>
 
     <section class="main-area">

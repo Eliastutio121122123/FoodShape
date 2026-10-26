@@ -3,7 +3,11 @@
   <nav class="landing-nav">
     <a class="brand" routerLink="/"><span class="brand-mark">⌁</span>FoodShare</a>
     <div class="nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#roles">Para quién es</a><a href="#impacto">Impacto</a><a href="#preguntas">Preguntas</a></div>
-    <a class="button small secondary" routerLink="/login">Iniciar sesión</a>
+    @if (dashboardRoute(); as route) {
+      <a class="button small secondary" [routerLink]="route">{{ dashboardLabel() }}</a>
+    } @else {
+      <a class="button small secondary" routerLink="/login">Iniciar sesi&#243;n</a>
+    }
   </nav>
 
   <section class="hero">

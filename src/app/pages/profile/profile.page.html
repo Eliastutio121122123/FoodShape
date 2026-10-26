@@ -1,0 +1,82 @@
+<ion-content [fullscreen]="true">
+  <main class="profile-page">
+    <header class="profile-topbar">
+      <a class="brand" routerLink="/">FoodShare</a>
+      <div class="profile-nav-actions">
+        <a class="back-link" [routerLink]="homeRoute()">Volver al panel</a>
+        <button class="logout-button" type="button" (click)="signOut()" [disabled]="signingOut()">
+          {{ signingOut() ? 'Cerrando sesion...' : 'Cerrar sesion' }}
+        </button>
+      </div>
+    </header>
+
+    <section class="profile-card">
+      <div class="profile-heading">
+        <div class="avatar">{{ (account()?.fullName || account()?.email || 'FS').slice(0, 1).toUpperCase() }}</div>
+        <div>
+          <span class="eyebrow">MI CUENTA</span>
+          <h1>Mi perfil</h1>
+          <p>Consulta y actualiza tu información personal.</p>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <p class="notice">Cargando tu perfil…</p>
+      } @else if (account(); as profile) {
+        @if (errorMessage()) { <p class="message error" role="alert">{{ errorMessage() }}</p> }
+        @if (successMessage()) { <p class="message success" role="status">{{ successMessage() }}</p> }
+
+        <form (submit)="$event.preventDefault(); save()">
+          <div class="form-grid">
+            <label>Nombre completo
+              <input [value]="fullName()" (input)="updateFullName($event)" autocomplete="name" required maxlength="150" />
+            </label>
+            <label>Correo electrónico
+              <input [value]="profile.email" type="email" readonly />
+              <small>Para cambiar el correo, usa la configuración de autenticación de tu cuenta.</small>
+            </label>
+            <label>Teléfono
+              <input [value]="phone()" (input)="updatePhone($event)" type="tel" autocomplete="tel" maxlength="40" />
+            </label>
+            <label>Perfil
+              <input [value]="roleName()" readonly />
+            </label>
+          </div>
+
+          @if (profile.organization; as organization) {
+            <section class="details-section">
+              <h2>Información de la institución</h2>
+              <div class="details-grid">
+                <p><span>Nombre</span><strong>{{ organization.name || 'Sin indicar' }}</strong></p>
+                <p><span>Verificación</span><strong>{{ organization.verificationStatus === 'approved' ? 'Aprobada' : organization.verificationStatus === 'rejected' ? 'Rechazada' : 'Pendiente' }}</strong></p>
+                <p><span>Representante</span><strong>{{ organization.representativeName || 'Sin indicar' }}</strong></p>
+                <p><span>RNC</span><strong>{{ organization.rnc || 'Sin indicar' }}</strong></p>
+                <p><span>Dirección</span><strong>{{ organization.address || 'Sin indicar' }}</strong></p>
+                <p><span>Ciudad</span><strong>{{ organization.city || 'Sin indicar' }}</strong></p>
+                @if (organization.profileType) { <p><span>Tipo de institución</span><strong>{{ organization.profileType }}</strong></p> }
+              </div>
+              <small>Para proteger la verificación, los datos institucionales se muestran aquí y no se editan desde este formulario.</small>
+            </section>
+          }
+
+          @if (profile.volunteer; as volunteer) {
+            <section class="details-section">
+              <h2>Información de voluntariado</h2>
+              <div class="details-grid">
+                <p><span>Transporte</span><strong>{{ volunteer.otherTransportType || volunteer.transportType || 'Sin indicar' }}</strong></p>
+                <p><span>Zona disponible</span><strong>{{ volunteer.availabilityZone || 'Sin indicar' }}</strong></p>
+                <p><span>Disponibilidad</span><strong>{{ volunteer.status === 'available' ? 'Disponible' : volunteer.status === 'assigned' ? 'Asignado' : 'Inactivo' }}</strong></p>
+              </div>
+            </section>
+          }
+
+          <div class="form-actions">
+            <button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Guardar cambios' }}</button>
+          </div>
+        </form>
+      } @else {
+        <p class="message error" role="alert">{{ errorMessage() || 'No encontramos el perfil de esta cuenta.' }}</p>
+      }
+    </section>
+  </main>
+</ion-content>

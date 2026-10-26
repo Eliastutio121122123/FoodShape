@@ -1,5 +1,5 @@
 <main class="workspace" [class.beneficiary-active]="role() === 'beneficiary'">
-  <header><a class="brand" routerLink="/"><span>⌁</span>FoodShare</a><div class="role-switch"><a routerLink="/app/admin">Admin</a><a routerLink="/app/donor">Donante</a><a routerLink="/app/beneficiary">Beneficiario</a><a routerLink="/app/volunteer">Voluntario</a></div><span class="avatar">FS</span></header>
+  <header><a class="brand" routerLink="/"><span>⌁</span>FoodShare</a><div class="role-switch"><a routerLink="/app/admin">Admin</a><a routerLink="/app/donor">Donante</a><a routerLink="/app/beneficiary">Beneficiario</a><a routerLink="/app/volunteer">Voluntario</a></div><button class="avatar" aria-label="Mi perfil" (click)="openProfile()">{{ (session()?.email || 'FS').slice(0, 1).toUpperCase() }}</button></header>
   <div class="notice">Vista de diseño con información de demostración. No hay conexión a base de datos.</div>
   @if (role() === 'beneficiary') {
     <section class="desktop-beneficiary">
@@ -11,7 +11,7 @@
         <button [class.active]="section() === 'history'" (click)="select('history')"><span>▤</span>Mis solicitudes</button>
         <button [class.active]="section() === 'history'" (click)="select('history')"><span>◷</span>Historial</button>
         <div class="sidebar-help"><span>¿Necesitas ayuda?</span><p>Estamos aquí para ayudarte a encontrar donaciones para tu comunidad.</p><button (click)="select('history')">Ver actividad</button></div>
-        <button class="sidebar-profile" (click)="select('history')"><span class="profile-avatar">AT</span><span><strong>Ana Torres</strong><small>Administradora</small></span><b>···</b></button>
+        <button class="sidebar-profile" (click)="openProfile()"><span class="profile-avatar">{{ (session()?.email || 'FS').slice(0, 1).toUpperCase() }}</span><span><strong>{{ session()?.email || 'Mi cuenta' }}</strong><small>Mi perfil · Beneficiaria</small></span><b>···</b></button>
       </aside>
 
       <div class="beneficiary-main">

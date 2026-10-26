@@ -1,6 +1,7 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { IonContent } from '@ionic/angular';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { AuthService } from '../../services/auth.service';
 
 type VolunteerSection = 'dashboard' | 'deliveries' | 'detail' | 'update' | 'history';
 
@@ -11,6 +12,9 @@ type VolunteerSection = 'dashboard' | 'deliveries' | 'detail' | 'update' | 'hist
   imports: [IonContent, RouterLink],
 })
 export class VolunteerPage {
+  private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
+  readonly session = this.auth.session;
   readonly section = signal<VolunteerSection>('dashboard');
   readonly menuOpen = signal(false);
 
@@ -22,4 +26,6 @@ export class VolunteerPage {
   toggleMenu(): void {
     this.menuOpen.update((open) => !open);
   }
+
+  openProfile(): void { void this.router.navigateByUrl('/app/profile'); }
 }

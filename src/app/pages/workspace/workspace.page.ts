@@ -1,9 +1,10 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { DonationRequestService } from '../../services/donation-request.service';
 import { DonationService } from '../../services/donation.service';
+import { AuthService } from '../../services/auth.service';
 
 type WorkspaceRole = 'admin' | 'donor' | 'beneficiary' | 'volunteer';
 
@@ -17,6 +18,9 @@ export class WorkspacePage {
   private readonly route = inject(ActivatedRoute);
   private readonly donationService = inject(DonationService);
   private readonly requestService = inject(DonationRequestService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  readonly session = this.auth.session;
   private readonly donationRows = toSignal(this.donationService.getAvailable(), { initialValue: [] });
   private readonly requestRows = toSignal(this.requestService.getByBeneficiaryOrganization('org-casa-luz'), { initialValue: [] });
   readonly role = signal<WorkspaceRole>('donor');
@@ -62,6 +66,7 @@ export class WorkspacePage {
   }
 
   select(section: string): void { this.section.set(section); this.showOther.set(false); }
+  openProfile(): void { void this.router.navigateByUrl('/app/profile'); }
   toggleOther(): void { this.showOther.update((visible) => !visible); }
   updateDonationSearch(event: Event): void { this.donationSearch.set((event.target as HTMLInputElement).value); }
   setDonationCategory(category: string): void { this.donationCategory.set(category); }
