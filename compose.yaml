@@ -10,6 +10,7 @@ services:
       - node_modules_supabase:/app/node_modules
     environment:
       CHOKIDAR_USEPOLLING: "true"
+      # These values come from FoodShape/.env (copy .env.example first).
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
     command: sh -c "node scripts/write-runtime-config.mjs && npm start -- --host 0.0.0.0 --port 8100 --poll 1000"
