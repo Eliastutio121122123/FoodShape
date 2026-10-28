@@ -132,8 +132,15 @@ export class AuthService {
         stage = 'profile';
         const role = await this.getActiveRole(data.user.id);
         if (!role) {
+          const { data: prof } = await this.supabase.from('profiles').select('role, status').eq('id', data.user.id).maybeSingle();
+          let msg = 'El perfil todavía no está aprobado o no está activo.';
+          if (prof?.role === 'donor' || prof?.role === 'beneficiary') {
+            msg = 'Tu organización está registrada pero pendiente de verificación por el equipo de administración.';
+          } else if (prof?.status === 'inactive') {
+            msg = 'Esta cuenta se encuentra inactiva. Comunícate con el equipo de soporte.';
+          }
           await this.supabase.auth.signOut();
-          throw new Error('El perfil todavia no esta aprobado o no esta activo.');
+          throw new Error(msg);
         }
         const result = { email: data.user.email ?? email, role, accessToken: data.session.access_token, expiresAt: new Date((data.session.expires_at ?? 0) * 1000).toISOString() };
         this.sessionState.set({ email: result.email, role });
@@ -586,13 +593,63 @@ export class AuthService {
   }
 
   private async getActiveRole(userId: string): Promise<AppRole | null> {
-    const { data, error } = await this.supabase.from('profiles').select('role, status').eq('id', userId).maybeSingle();
-    if (error || !data || data.status !== 'active' || !roles.includes(data.role as AppRole)) return null;
+    let { data } = await this.supabase.from('profiles').select('id, role, status').eq('id', userId).maybeSingle();
+
+    // Si no existe la fila en profiles, auto-crearla usando la metadata de auth
+    if (!data) {
+      const { data: userData } = await this.supabase.auth.getUser();
+      const user = userData?.user;
+      if (user && user.id === userId) {
+        const meta = user.user_metadata || {};
+        const rawRole = meta['role'] as AppRole;
+        const assignedRole: AppRole = roles.includes(rawRole) ? rawRole : 'volunteer';
+        const fullName = meta['full_name'] || meta['name'] || user.email?.split('@')[0] || 'Usuario';
+        const phone = meta['phone'] || '';
+        const initialStatus = (assignedRole === 'donor' || assignedRole === 'beneficiary') ? 'pending' : 'active';
+
+        const { data: created } = await this.supabase.from('profiles').upsert({
+          id: userId,
+          email: user.email?.toLowerCase(),
+          full_name: fullName,
+          phone,
+          role: assignedRole,
+          status: initialStatus,
+        }).select('id, role, status').maybeSingle();
+
+        if (created) data = created;
+
+        if (assignedRole === 'volunteer') {
+          await this.supabase.from('volunteer_profiles').upsert({
+            user_id: userId,
+            transport_type: meta['transport_type'] || null,
+            other_transport_type: meta['other_transport_type'] || null,
+            availability_zone: meta['availability_zone'] || '',
+            status: 'available',
+          }).catch(() => {});
+        }
+      }
+    }
+
+    if (!data) return null;
+
+    // Los voluntarios no requieren verificación institucional; si quedaron en 'pending', activarlos
+    if (data.role === 'volunteer' && data.status === 'pending') {
+      await this.supabase.from('profiles').update({ status: 'active' }).eq('id', userId).catch(() => {});
+      data.status = 'active';
+    }
+
+    if (data.status !== 'active') {
+      return null;
+    }
+
     if (data.role === 'donor' || data.role === 'beneficiary') {
       const { data: organization } = await this.supabase.from('organizations').select('verification_status').eq('owner_id', userId).maybeSingle();
-      if (organization?.verification_status !== 'approved') return null;
+      if (organization && organization.verification_status !== 'approved') {
+        return null;
+      }
     }
-    return data.role as AppRole;
+
+    return roles.includes(data.role as AppRole) ? (data.role as AppRole) : null;
   }
 }
 
