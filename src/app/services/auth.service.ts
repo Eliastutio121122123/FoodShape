@@ -30,6 +30,30 @@ export interface AdminDashboardSnapshot {
   recentDonations: { id: string; foodName: string; quantity: number; unit: string; donorName: string; createdAt: string }[];
 }
 export interface AdminReportDonation { id: string; foodName: string; categoryName: string; quantity: number; unit: string; status: string; createdAt: string; donorOrganizationId: string; }
+export type VolunteerDeliveryStatus = 'pending' | 'assigned' | 'pickup_in_progress' | 'picked_up' | 'delivered' | 'cancelled';
+export interface VolunteerDeliveryItem {
+  id: string;
+  status: VolunteerDeliveryStatus;
+  pickupAt: string | null;
+  deliveredAt: string | null;
+  foodName: string;
+  quantity: number;
+  unit: string;
+  pickupAddress: string;
+  pickupCity: string;
+  pickupStartsAt: string | null;
+  donorName: string;
+  beneficiaryName: string;
+  beneficiaryAddress: string;
+  beneficiaryCity: string;
+  notes: string | null;
+}
+export interface VolunteerDashboardSnapshot {
+  volunteerStatus: string;
+  activeDeliveries: VolunteerDeliveryItem[];
+  completedThisMonth: number;
+  totalCompleted: number;
+}
 export interface AdminReportSnapshot {
   donationCount: number; estimatedKilograms: number; participatingDonors: number; completedDeliveries: number;
   categoryBreakdown: { name: string; donationCount: number; estimatedKilograms: number; percent: number }[];
@@ -150,7 +174,7 @@ export class AuthService {
   loadAccountProfile(): Observable<AccountProfile> {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
-      if (userError || !user) throw userError ?? new Error('Inicia sesiÃ³n para consultar tu perfil.');
+      if (userError || !user) throw userError ?? new Error('Inicia sesiÃƒÂ³n para consultar tu perfil.');
 
       const { data: profile, error: profileError } = await this.supabase.from('profiles')
         .select('id, email, full_name, phone, role, status')
@@ -201,7 +225,7 @@ export class AuthService {
   updateAccountProfile(fullName: string, phone: string): Observable<void> {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
-      if (userError || !user) throw userError ?? new Error('Inicia sesiÃ³n para editar tu perfil.');
+      if (userError || !user) throw userError ?? new Error('Inicia sesiÃƒÂ³n para editar tu perfil.');
 
       const { data, error } = await this.supabase.from('profiles')
         .update({ full_name: fullName.trim(), phone: phone.trim() })
@@ -439,6 +463,59 @@ export class AuthService {
   setPendingOrganizations(applications: readonly OrganizationApplication[]): void { this.applicationsState.set(applications); }
   removePendingOrganization(id: string): void { this.applicationsState.update((items) => items.filter((item) => item.id !== id)); }
 
+
+  loadVolunteerDashboard(): Observable<VolunteerDashboardSnapshot> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Sesion requerida.');
+      const { data: volunteerProfile, error: vpError } = await this.supabase
+        .from('volunteer_profiles').select('status').eq('user_id', user.id).maybeSingle();
+      if (vpError) throw vpError;
+      const { data: rawDeliveries, error: deliveriesError } = await this.supabase
+        .from('deliveries')
+        .select(`id, status, pickup_at, delivered_at, notes, donation_requests!inner(donations!inner(food_name, quantity, unit, address, city, pickup_starts_at, organizations!donor_organization_id(name)), organizations!beneficiary_organization_id(name, address, city))`)
+        .eq('volunteer_id', user.id)
+        .not('status', 'in', '(delivered,cancelled)')
+        .order('pickup_at', { ascending: true, nullsFirst: false });
+      if (deliveriesError) throw deliveriesError;
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const [monthResult, totalResult] = await Promise.all([
+        this.supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('volunteer_id', user.id).eq('status', 'delivered').gte('delivered_at', startOfMonth),
+        this.supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('volunteer_id', user.id).eq('status', 'delivered'),
+      ]);
+      const mapDelivery = (d: Record<string, unknown>): VolunteerDeliveryItem => {
+        const req = d['donation_requests'] as Record<string, unknown> | null;
+        const don = req ? req['donations'] as Record<string, unknown> | null : null;
+        const donorOrg = don ? (don['organizations'] as Record<string, string> | null) : null;
+        const benOrg = req ? (req['organizations'] as Record<string, string> | null) : null;
+        return {
+          id: d['id'] as string, status: d['status'] as VolunteerDeliveryStatus,
+          pickupAt: (d['pickup_at'] as string | null) ?? null, deliveredAt: (d['delivered_at'] as string | null) ?? null,
+          notes: (d['notes'] as string | null) ?? null, foodName: (don?.['food_name'] as string) ?? 'Alimento',
+          quantity: Number(don?.['quantity'] ?? 0), unit: (don?.['unit'] as string) ?? '',
+          pickupAddress: (don?.['address'] as string) ?? '', pickupCity: (don?.['city'] as string) ?? '',
+          pickupStartsAt: (don?.['pickup_starts_at'] as string | null) ?? null,
+          donorName: donorOrg?.['name'] ?? 'Organizacion donante', beneficiaryName: benOrg?.['name'] ?? 'Organizacion beneficiaria',
+          beneficiaryAddress: benOrg?.['address'] ?? '', beneficiaryCity: benOrg?.['city'] ?? '',
+        };
+      };
+      return {
+        volunteerStatus: volunteerProfile?.status ?? 'available',
+        activeDeliveries: (rawDeliveries ?? []).map(d => mapDelivery(d as Record<string, unknown>)),
+        completedThisMonth: monthResult.count ?? 0, totalCompleted: totalResult.count ?? 0,
+      };
+    })());
+  }
+
+  updateVolunteerStatus(newStatus: 'available' | 'inactive'): Observable<void> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Sesion requerida.');
+      const { error } = await this.supabase.from('volunteer_profiles').update({ status: newStatus }).eq('user_id', user.id);
+      if (error) throw error;
+    })());
+  }
   async signOut(): Promise<void> {
     const { error } = await this.supabase.auth.signOut({ scope: 'local' });
     this.sessionState.set(null);
@@ -466,3 +543,5 @@ export class AuthService {
     return data.role as AppRole;
   }
 }
+
+
