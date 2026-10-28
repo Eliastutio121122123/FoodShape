@@ -516,6 +516,13 @@ export class AuthService {
       if (error) throw error;
     })());
   }
+  updatePassword(newPassword: string): Observable<void> {
+    return from((async () => {
+      const { error } = await this.supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+    })());
+  }
+
   async signOut(): Promise<void> {
     const { error } = await this.supabase.auth.signOut({ scope: 'local' });
     this.sessionState.set(null);

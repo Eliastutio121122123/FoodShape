@@ -110,8 +110,324 @@
         }
       }
 
-      @if (section() === 'settings') {
-        <section class="page-title"><div><span class="eyebrow">SISTEMA</span><h1>Configuración</h1><p>Gestiona las preferencias generales de FoodShare.</p></div></section><section class="settings-list"><article><span class="settings-icon">♙</span><div><h2>Cuenta administrativa</h2><p>Administra tu perfil, contraseña y acceso.</p></div><button>›</button></article><article><span class="settings-icon">♧</span><div><h2>Notificaciones</h2><p>Configura los avisos de actividad y verificaciones.</p></div><label class="toggle"><input type="checkbox" checked /><i></i></label></article><article><span class="settings-icon">⚑</span><div><h2>Idioma y región</h2><p>Español · República Dominicana</p></div><button>›</button></article><article><span class="settings-icon">♢</span><div><h2>Seguridad</h2><p>Sesiones activas y autenticación.</p></div><button>›</button></article></section>
+            @if (section() === 'settings') {
+        <section class="page-title"><div><span class="eyebrow">SISTEMA</span><h1>Configuración</h1><p>Gestiona las preferencias generales de FoodShare.</p></div></section>
+
+        @if (settingsSaved()) { <p class="settings-toast" role="status">{{ settingsSavedMessage() }}</p> }
+
+        @if (!settingsSubsection()) {
+          <section class="settings-list">
+            <article class="clickable" (click)="openAccountSubsection()">
+              <span class="settings-icon">♙</span>
+              <div><h2>Cuenta administrativa</h2><p>Administra tu perfil, contraseña y acceso.</p></div>
+              <button type="button" aria-label="Abrir cuenta administrativa">›</button>
+            </article>
+            <article class="clickable" (click)="openSettingsSubsection('notifications')">
+              <span class="settings-icon">♧</span>
+              <div><h2>Notificaciones</h2><p>Configura los avisos de actividad y verificaciones.</p></div>
+              <label class="toggle" (click)="$event.stopPropagation()">
+                <input type="checkbox" [checked]="notificationsEnabled()" (change)="toggleNotifications()" /><i></i>
+              </label>
+            </article>
+            <article class="clickable" (click)="openSettingsSubsection('locale')">
+              <span class="settings-icon">⚑</span>
+              <div><h2>Idioma y región</h2><p>Español · República Dominicana</p></div>
+              <button type="button" aria-label="Abrir idioma y región">›</button>
+            </article>
+            <article class="clickable" (click)="openSettingsSubsection('security')">
+              <span class="settings-icon">♢</span>
+              <div><h2>Seguridad</h2><p>Sesiones activas y autenticación.</p></div>
+              <button type="button" aria-label="Abrir seguridad">›</button>
+            </article>
+          </section>
+
+          <section class="settings-info-card">
+            <span class="eyebrow">INFORMACIÓN DEL SISTEMA</span>
+            <div class="settings-info-grid">
+              <div><small>Plataforma</small><strong>FoodShare</strong></div>
+              <div><small>Versión</small><strong>1.0.0</strong></div>
+              <div><small>Base de datos</small><strong>{{ supabaseUrlMasked() }}</strong></div>
+              <div><small>Rol activo</small><strong>Administración</strong></div>
+            </div>
+          </section>
+        }
+
+        @if (settingsSubsection() === 'account') {
+          <section class="settings-subsection">
+            <button class="settings-back" type="button" (click)="closeSettingsSubsection()">← Volver a Configuración</button>
+            <span class="eyebrow">CUENTA ADMINISTRATIVA</span>
+            <h2 class="settings-sub-title">Tu cuenta y credenciales</h2>
+
+            @if (accountError()) { <p class="admin-error" role="alert">{{ accountError() }}</p> }
+            @if (accountLoading()) { <p class="empty-admin-state">Cargando información de la cuenta...</p> }
+            @else if (accountProfile(); as profile) {
+              <section class="settings-list">
+                <article>
+                  <span class="settings-icon">✉</span>
+                  <div><h2>Correo electrónico</h2><p>{{ profile.email }}</p></div>
+                  <span class="settings-tag">Solo lectura</span>
+                </article>
+                <article>
+                  <span class="settings-icon">♙</span>
+                  <div><h2>Nombre completo</h2><p>{{ profile.fullName || 'Administrador FoodShare' }}</p></div>
+                  @if (!accountEditingName()) {
+                    <button type="button" class="settings-btn-outline" (click)="startEditingName()">Editar</button>
+                  }
+                </article>
+                <article>
+                  <span class="settings-icon">☎</span>
+                  <div><h2>Teléfono de contacto</h2><p>{{ profile.phone || 'No registrado' }}</p></div>
+                </article>
+                <article>
+                  <span class="settings-icon">🛡</span>
+                  <div><h2>Rol administrativo</h2><p>Administración global</p></div>
+                  <span class="settings-tag active-status">Activo</span>
+                </article>
+                <article>
+                  <span class="settings-icon">✓</span>
+                  <div><h2>Estado de cuenta</h2><p>{{ profile.status === 'active' ? 'Cuenta verificada y activa' : 'Estado: ' + profile.status }}</p></div>
+                </article>
+              </section>
+
+              @if (accountEditingName()) {
+                <section class="settings-info-card" style="margin-top:17px">
+                  <span class="eyebrow">EDITAR DATOS DE PERFIL</span>
+                  <div class="settings-form-grid">
+                    <div class="settings-field">
+                      <label>Nombre completo</label>
+                      <input type="text" [value]="accountEditName()" (input)="setAccountEditName($event)" placeholder="Tu nombre completo" />
+                    </div>
+                    <div class="settings-field">
+                      <label>Teléfono</label>
+                      <input type="tel" [value]="accountEditPhone()" (input)="setAccountEditPhone($event)" placeholder="809-000-0000" />
+                    </div>
+                  </div>
+                  <div class="settings-actions" style="margin-top:14px">
+                    <button type="button" class="settings-btn-outline" (click)="cancelEditingName()" [disabled]="accountSaving()">Cancelar</button>
+                    <button type="button" class="primary-action" (click)="saveAccountName()" [disabled]="accountSaving()">{{ accountSaving() ? 'Guardando...' : 'Guardar cambios' }}</button>
+                  </div>
+                </section>
+              }
+
+              <section class="settings-info-card" style="margin-top:17px">
+                <span class="eyebrow">SEGURIDAD: CAMBIAR CONTRASEÑA</span>
+                <p style="margin:5px 0 12px;color:#78867c;font-size:10px">La contraseña debe contener al menos 6 caracteres y se actualizará en Supabase Auth.</p>
+                @if (passwordError()) { <p class="admin-error" role="alert" style="margin:8px 0 12px">{{ passwordError() }}</p> }
+                <div class="settings-form-grid">
+                  <div class="settings-field">
+                    <label>Nueva contraseña</label>
+                    <div class="settings-password-wrap">
+                      <input [type]="passwordShowNew() ? 'text' : 'password'" [value]="passwordNew()" (input)="setPasswordNew($event)" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+                      <button type="button" class="settings-password-toggle" (click)="togglePasswordShowNew()" aria-label="Mostrar/ocultar contraseña">{{ passwordShowNew() ? '🙈' : '👁' }}</button>
+                    </div>
+                  </div>
+                  <div class="settings-field">
+                    <label>Confirmar nueva contraseña</label>
+                    <div class="settings-password-wrap">
+                      <input [type]="passwordShowNew() ? 'text' : 'password'" [value]="passwordConfirm()" (input)="setPasswordConfirm($event)" placeholder="Repite la nueva contraseña" autocomplete="new-password" />
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-actions" style="margin-top:14px">
+                  <button type="button" class="primary-action" (click)="changePassword()" [disabled]="passwordChanging() || !passwordNew() || !passwordConfirm()">{{ passwordChanging() ? 'Actualizando...' : 'Actualizar contraseña' }}</button>
+                </div>
+              </section>
+
+              <div class="settings-danger-zone">
+                <span class="eyebrow">ZONA DE SESIÓN</span>
+                <p style="margin:8px 0 14px;color:#8b6e5e;font-size:10px">Cerrar sesión terminará tu sesión activa en este navegador.</p>
+                <div class="settings-actions">
+                  <button type="button" class="settings-btn-danger" (click)="signOutFromSettings()">Cerrar sesión en este dispositivo</button>
+                </div>
+              </div>
+            }
+          </section>
+        }
+
+        @if (settingsSubsection() === 'notifications') {
+          <section class="settings-subsection">
+            <button class="settings-back" type="button" (click)="closeSettingsSubsection()">← Volver a Configuración</button>
+            <span class="eyebrow">PREFERENCIAS</span>
+            <h2 class="settings-sub-title">Notificaciones del sistema</h2>
+
+            <section class="settings-list">
+              <article>
+                <span class="settings-icon">♧</span>
+                <div><h2>Avisos globales del sistema</h2><p>Habilita o deshabilita todas las alertas administrativas en tiempo real.</p></div>
+                <label class="toggle">
+                  <input type="checkbox" [checked]="notificationsEnabled()" (change)="toggleNotifications()" /><i></i>
+                </label>
+              </article>
+            </section>
+
+            <section class="settings-info-card" style="margin-top:17px">
+              <span class="eyebrow">ALERTAS DE ACTIVIDAD OPERATIVA</span>
+              <section class="settings-list" style="margin-top:12px;border:none">
+                <article>
+                  <span class="settings-icon">⌂</span>
+                  <div><h2>Instituciones pendientes de revisión</h2><p>Aviso inmediato al registrarse una nueva organización donante o beneficiaria.</p></div>
+                  <label class="toggle">
+                    <input type="checkbox" [checked]="notifyNewOrgs()" (change)="toggleNotifyNewOrgs()" /><i></i>
+                  </label>
+                </article>
+                <article>
+                  <span class="settings-icon">♙</span>
+                  <div><h2>Nuevos usuarios en la red</h2><p>Alerta cuando voluntarios o usuarios completan su registro.</p></div>
+                  <label class="toggle">
+                    <input type="checkbox" [checked]="notifyNewUsers()" (change)="toggleNotifyNewUsers()" /><i></i>
+                  </label>
+                </article>
+                <article>
+                  <span class="settings-icon">▦</span>
+                  <div><h2>Donaciones publicadas</h2><p>Notificación cuando una institución donante publica nuevos lotes de alimentos.</p></div>
+                  <label class="toggle">
+                    <input type="checkbox" [checked]="notifyNewDonations()" (change)="toggleNotifyNewDonations()" /><i></i>
+                  </label>
+                </article>
+                <article>
+                  <span class="settings-icon">✓</span>
+                  <div><h2>Entregas completadas</h2><p>Notificación cuando un voluntario marca como entregado un pedido de alimentos.</p></div>
+                  <label class="toggle">
+                    <input type="checkbox" [checked]="notifyDeliveries()" (change)="toggleNotifyDeliveries()" /><i></i>
+                  </label>
+                </article>
+              </section>
+            </section>
+
+            <section class="settings-info-card" style="margin-top:17px">
+              <span class="eyebrow">CANALES DE COMUNICACIÓN</span>
+              <section class="settings-list" style="margin-top:12px;border:none">
+                <article>
+                  <span class="settings-icon">✉</span>
+                  <div><h2>Alertas por correo electrónico</h2><p>Recibir copias por email de instituciones que requieran validación urgente.</p></div>
+                  <label class="toggle">
+                    <input type="checkbox" [checked]="notifyEmail()" (change)="toggleNotifyEmail()" /><i></i>
+                  </label>
+                </article>
+                <article>
+                  <span class="settings-icon">▥</span>
+                  <div><h2>Resumen diario de actividad</h2><p>Envío diario de métricas clave de donaciones y entregas.</p></div>
+                  <label class="toggle">
+                    <input type="checkbox" [checked]="notifyDailyDigest()" (change)="toggleNotifyDailyDigest()" /><i></i>
+                  </label>
+                </article>
+              </section>
+            </section>
+
+            <div class="settings-actions" style="margin-top:18px">
+              <button type="button" class="settings-btn-outline" (click)="resetNotificationPreferences()">Restablecer valores predeterminados</button>
+            </div>
+          </section>
+        }
+
+        @if (settingsSubsection() === 'locale') {
+          <section class="settings-subsection">
+            <button class="settings-back" type="button" (click)="closeSettingsSubsection()">← Volver a Configuración</button>
+            <span class="eyebrow">REGIONALIZACIÓN</span>
+            <h2 class="settings-sub-title">Idioma y región</h2>
+
+            <section class="settings-info-card">
+              <span class="eyebrow">PREFERENCIAS REGIONALES</span>
+              <div class="settings-form-grid">
+                <div class="settings-field">
+                  <label>Idioma de la interfaz</label>
+                  <select [value]="localeLanguage()" (change)="setLocaleLanguage($event)">
+                    <option value="es-DO">Español (República Dominicana) - Predeterminado</option>
+                    <option value="en-US">English (United States)</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <label>País / Región</label>
+                  <select [value]="localeCountry()" (change)="setLocaleCountry($event)">
+                    <option value="DO">República Dominicana</option>
+                    <option value="HT">Haití</option>
+                    <option value="PR">Puerto Rico</option>
+                    <option value="US">Estados Unidos</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <label>Zona horaria</label>
+                  <select [value]="localeTimezone()" (change)="setLocaleTimezone($event)">
+                    <option value="America/Santo_Domingo">(GMT-04:00) Santo Domingo / Hora del Atlántico</option>
+                    <option value="America/New_York">(GMT-05:00) Hora del Este (ET)</option>
+                    <option value="UTC">Tiempo Universal Coordinado (UTC)</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <label>Formato de fecha</label>
+                  <select [value]="localeDateFormat()" (change)="setLocaleDateFormat($event)">
+                    <option value="DD/MM/YYYY">DD/MM/AAAA (ej. 28/10/2026)</option>
+                    <option value="YYYY-MM-DD">AAAA-MM-DD (ISO)</option>
+                    <option value="MM/DD/YYYY">MM/DD/AAAA</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <label>Unidad de peso de alimentos</label>
+                  <select [value]="localeWeightUnit()" (change)="setLocaleWeightUnit($event)">
+                    <option value="kg">Kilogramos (kg) - Predeterminado</option>
+                    <option value="lb">Libras (lb)</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <label>Moneda de referencia</label>
+                  <select disabled>
+                    <option>DOP ($) - Peso Dominicano</option>
+                  </select>
+                </div>
+              </div>
+              <div class="settings-actions" style="margin-top:16px">
+                <button type="button" class="primary-action" (click)="saveLocalePreferences()">Guardar configuración regional</button>
+              </div>
+            </section>
+          </section>
+        }
+
+        @if (settingsSubsection() === 'security') {
+          <section class="settings-subsection">
+            <button class="settings-back" type="button" (click)="closeSettingsSubsection()">← Volver a Configuración</button>
+            <span class="eyebrow">SEGURIDAD Y AUTENTICACIÓN</span>
+            <h2 class="settings-sub-title">Sesiones activas y credenciales</h2>
+            <section class="settings-list">
+              <article>
+                <span class="settings-icon">✉</span>
+                <div><h2>Cuenta activa</h2><p>{{ session()?.email || '—' }}</p></div>
+                <span class="settings-tag active-status">Activa</span>
+              </article>
+              <article>
+                <span class="settings-icon">🛡</span>
+                <div><h2>Nivel de acceso</h2><p>Administración global (Superadministrador)</p></div>
+                <span class="settings-tag" style="background:#e8effa;color:#355c8c">Privilegiado</span>
+              </article>
+              <article>
+                <span class="settings-icon">⚙</span>
+                <div><h2>Proveedor de autenticación</h2><p>Supabase Auth (PostgreSQL con JWT)</p></div>
+              </article>
+              <article>
+                <span class="settings-icon">⚑</span>
+                <div><h2>Servidor remoto</h2><p>{{ supabaseUrlMasked() }}</p></div>
+              </article>
+            </section>
+
+            <section class="settings-info-card" style="margin-top:17px">
+              <span class="eyebrow">POLÍTICAS DE SEGURIDAD VIGENTES</span>
+              <div class="settings-info-grid">
+                <div><small>Políticas RLS</small><strong>Habilitado en Supabase</strong></div>
+                <div><small>Protección rutas</small><strong>Angular AuthGuard</strong></div>
+                <div><small>Cifrado</small><strong>TLS / HTTPS</strong></div>
+                <div><small>Tipo de sesión</small><strong>JWT Seguro Local</strong></div>
+              </div>
+            </section>
+
+            <div class="settings-danger-zone">
+              <span class="eyebrow">ACCIONES DE SEGURIDAD</span>
+              <div class="settings-actions">
+                <button type="button" class="settings-btn-outline" (click)="openAccountSubsection()">Cambiar contraseña →</button>
+                <button type="button" class="settings-btn-outline" (click)="openAccountSubsection()">Editar perfil</button>
+                <button type="button" class="settings-btn-danger" (click)="signOutFromSettings()">Cerrar sesión</button>
+              </div>
+            </div>
+          </section>
+        }
       }
     </section>
   </main>

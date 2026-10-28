@@ -1,6 +1,6 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 25 de octubre de 2026.
+**Estado revisado:** 27 de octubre de 2026.
 
 Este documento conserva el alcance funcional acordado y describe quÃ© partes estÃ¡n implementadas en el cÃ³digo, cuÃ¡les existen solo en la base de datos y cuÃ¡les aÃºn estÃ¡n pendientes. Una tabla o una pantalla por sÃ­ sola no significa que una funcionalidad estÃ© completa: para considerarla conectada, el flujo debe guardar y leer datos persistentes y aplicar los permisos correspondientes.
 
@@ -70,7 +70,7 @@ Estados usados:
 | 16 | GestiÃ³n de estados de donaciones y solicitudes | Pendiente | Hay modelos y transiciones de ejemplo; hace falta persistirlas y asegurar consistencia entre tablas. |
 
 ### 3.5 Recogida y entrega
-
+    
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
 | 17 | AsignaciÃ³n de voluntarios | Pendiente | `DeliveryService` asigna sobre datos en memoria. La tabla remota estÃ¡ definida, pero la asignaciÃ³n no estÃ¡ conectada. |
@@ -92,7 +92,7 @@ Estados usados:
 |---|---|---|---|
 | 25 | Generacion de reportes | Parcial | Consulta donaciones y entregas por periodo desde Supabase, muestra totales y desglose por categoria, y exporta el resumen y sus registros a CSV. No genera PDF y falta verificar el flujo con datos reales en el proyecto remoto. |
 | 28 | GestiÃ³n de ubicaciones | Parcial | El esquema almacena direcciones y ciudades, ademÃ¡s de coordenadas opcionales para donaciones. Faltan geolocalizaciÃ³n y filtros remotos por ubicaciÃ³n. |
-| 29 | ConfiguraciÃ³n de plataforma | Pendiente | `platform_settings` existe en el esquema, pero no hay gestiÃ³n funcional desde el panel. |
+| 29 | Configuración de plataforma | Parcial | Apartado de Configuración administrativo implementado con cuatro módulos: Cuenta administrativa (consulta de perfil, edición de datos personales y cambio de contraseña seguro en Supabase Auth), Notificaciones (control maestro y alertas por evento y canal con persistencia local), Idioma y región (idioma, zona horaria, formatos de fecha y unidades de peso kg/lb con persistencia local) y Seguridad (supervisión de sesión activa, proveedor Supabase Auth y cierre de sesión seguro). |
 
 ### 3.8 EstadÃ­sticas e impacto
 
@@ -111,6 +111,11 @@ Estados usados:
 6. **Reportes administrativos:** consulta donaciones no canceladas creadas en el periodo y entregas completadas cuya fecha de entrega cae en ese periodo. Permite descargar un CSV con totales, desglose por categoria y donaciones. Los kg solo se estiman para unidades kg, g y lb.
 7. **Esquema y permisos base:** la migracion inicial define tablas y politicas RLS. Que una tabla exista no significa que todos los servicios Angular esten conectados.
 8. **Retorno al panel desde la pagina publica:** con una sesion activa, el boton superior de la landing lleva al panel del rol autenticado; para administracion muestra `Volver a administracion`. Sin sesion, mantiene el acceso a `Iniciar sesion`.
+9. **Configuración administrativa:** el panel de administración dispone de un apartado completo de Configuración dividido en cuatro módulos operativos:
+   - **Cuenta administrativa:** consulta de perfil, edición persistente de nombre y teléfono mediante `auth.updateAccountProfile`, actualización de contraseña con `supabase.auth.updateUser` y cierre de sesión.
+   - **Notificaciones:** control global maestro, configuración de alertas operativas (instituciones pendientes, nuevos usuarios, donaciones y entregas) y canales (web, correo, resumen diario) con persistencia local en `localStorage`.
+   - **Idioma y región:** ajustes regionales adaptados a República Dominicana (idioma, zona horaria, formatos de fecha y unidades métricas kg/lb) con persistencia local.
+   - **Seguridad y sesiones:** monitoreo de sesión activa, identificación del proveedor Supabase Auth, estatus de políticas RLS y accesos directos de administración de credenciales.
 
 ## 5. Catalogos administrativos
 
