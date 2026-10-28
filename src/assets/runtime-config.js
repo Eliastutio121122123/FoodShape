@@ -1,4 +1,1 @@
-window.FOODSHARE_CONFIG = {
-  supabaseUrl: 'https://YOUR_PROJECT_REF.supabase.co',
-  supabasePublishableKey: 'YOUR_SUPABASE_PUBLISHABLE_KEY'
-};
+window.FOODSHARE_CONFIG = {"supabaseUrl":"https://dctkrcbkrphjgsqsrdab.supabase.co","supabasePublishableKey":"sb_publishable_wiHXbnDUk_rc7Mdd3Uts3A_FPBWnasY"};
