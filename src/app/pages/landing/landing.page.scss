@@ -13,3 +13,41 @@ ion-content { --background: #fdf6e9; }
 @media(max-width:700px){.section{padding:55px 0}.steps-grid,.role-cards,.testimonials>div,.impact-grid,.safety{grid-template-columns:1fr}.impact-grid{gap:35px;padding:55px 20px;margin:0 -20px}.numbers{grid-template-columns:1fr}.numbers article:first-child{grid-column:auto}.safety{gap:35px}.safety-illustration{height:230px}.final-cta{padding:31px;display:block}.final-cta .button{margin-top:24px}footer{grid-template-columns:1fr;gap:15px}}
 
 .role-cards span{color:#217447;font-weight:700;font-size:14px}.role-cta{margin-top:28px}
+
+.nav-profile-pill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px 6px 6px;
+  border-radius: 28px;
+  border: 1.5px solid #217447;
+  background: #fff;
+  color: #173b2b;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  &:hover {
+    background: #f0faf4;
+    box-shadow: 0 2px 8px #27804b22;
+  }
+}
+.nav-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #217447;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.nav-profile-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

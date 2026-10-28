@@ -4,7 +4,10 @@
     <a class="brand" routerLink="/"><span class="brand-mark">⌁</span>FoodShare</a>
     <div class="nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#roles">Para quién es</a><a href="#impacto">Impacto</a><a href="#preguntas">Preguntas</a></div>
     @if (dashboardRoute(); as route) {
-      <a class="button small secondary" [routerLink]="route">{{ dashboardLabel() }}</a>
+      <a class="nav-profile-pill" [routerLink]="route" title="Ir a mi panel">
+        <span class="nav-avatar">{{ avatarLetter() }}</span>
+        <span class="nav-profile-name">{{ displayName() }}</span>
+      </a>
     } @else {
       <a class="button small secondary" routerLink="/login">Iniciar sesi&#243;n</a>
     }
@@ -23,7 +26,7 @@
     </div>
   </section>
 
-  <section class="purpose" id="impacto">“Transformamos alimentos que podrían desperdiciarse <span>en oportunidades para ayudar.</span>”</section>
+  <section class="purpose" id="impacto">"Transformamos alimentos que podrían desperdiciarse <span>en oportunidades para ayudar.</span>"</section>
   <section class="meaning" id="como-funciona">
     <article><b class="orange">●</b><h2>Food = alimentos</h2><p>Comida en buen estado que hoy termina en la basura.</p></article>
     <article><b class="green">◒</b><h2>Share = compartir</h2><p>Transformar el excedente en una oportunidad.</p></article>
@@ -41,7 +44,7 @@
 
   <section class="section safety"><div class="safety-illustration"><span>✓</span><span>⌂</span><span>♥</span></div><div><span class="eyebrow">Una red de confianza</span><h2>Conexiones responsables, donaciones seguras.</h2><p>Las organizaciones se verifican antes de operar y cada entrega queda registrada para mantener un proceso claro para todos.</p><ul><li>Organizaciones verificadas</li><li>Seguimiento de recogida y entrega</li><li>Historial de donaciones e impacto</li></ul></div></section>
 
-  <section class="testimonials"><span class="eyebrow">Una comunidad que crece</span><h2>Pequeñas acciones, grandes cambios.</h2><div><article><p>“Ahora podemos encontrar donaciones de una manera más organizada y cercana.”</p><b>Organización beneficiaria</b></article><article><p>“Dar salida a nuestros excedentes es más fácil cuando sabemos a dónde llegan.”</p><b>Organización donante</b></article><article><p>“Cada ruta es una oportunidad de aportar algo importante.”</p><b>Voluntario</b></article></div><small>Testimonios de ejemplo para el diseño.</small></section>
+  <section class="testimonials"><span class="eyebrow">Una comunidad que crece</span><h2>Pequeñas acciones, grandes cambios.</h2><div><article><p>"Ahora podemos encontrar donaciones de una manera más organizada y cercana."</p><b>Organización beneficiaria</b></article><article><p>"Dar salida a nuestros excedentes es más fácil cuando sabemos a dónde llegan."</p><b>Organización donante</b></article><article><p>"Cada ruta es una oportunidad de aportar algo importante."</p><b>Voluntario</b></article></div><small>Testimonios de ejemplo para el diseño.</small></section>
 
   <section class="faq" id="preguntas"><span class="eyebrow">Preguntas frecuentes</span><h2>Todo lo necesario para comenzar.</h2><details><summary>¿Quién puede usar FoodShare?</summary><p>Organizaciones donantes, organizaciones beneficiarias y personas voluntarias.</p></details><details><summary>¿FoodShare vende alimentos?</summary><p>No. FoodShare facilita procesos de donación, recogida y entrega de alimentos.</p></details><details><summary>¿Cómo se controla el proceso?</summary><p>Las donaciones, solicitudes y entregas tienen estados visibles y un historial de seguimiento.</p></details></section>
 
