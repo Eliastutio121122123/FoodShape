@@ -18,6 +18,8 @@ export class LandingPage implements OnInit {
     return role ? `/app/${role}` : null;
   });
 
+  readonly avatarUrl = computed(() => this.profile()?.avatarUrl ?? this.auth.currentAvatarUrl() ?? null);
+
   readonly avatarLetter = computed(() => {
     const name = this.profile()?.fullName || this.auth.session()?.email || '';
     return name.slice(0, 1).toUpperCase() || '?';

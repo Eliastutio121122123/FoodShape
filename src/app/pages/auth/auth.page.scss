@@ -19,3 +19,45 @@
 
 .success-message{padding:12px 14px;border:1px solid #b8dcc1;border-radius:10px;background:#f1faf3;color:#216b3c!important;font-size:13px;font-weight:600}.login-error{padding:10px 12px;border:1px solid #f0c2bd;border-radius:10px;background:#fff8f6}
 .google-button{display:flex;justify-content:center;min-height:40px;margin-top:14px}.google-error{text-align:center!important}
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: 7px;
+
+  input {
+    width: 100%;
+    margin-top: 0 !important;
+    padding-right: 48px !important;
+  }
+
+  .password-toggle-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    padding: 6px;
+    display: grid;
+    place-items: center;
+    color: #64756b;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: color 0.15s, background-color 0.15s;
+
+    &:hover {
+      color: #173b2b;
+      background: #f0eae0;
+    }
+
+    svg {
+      display: block;
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+    }
+  }
+}

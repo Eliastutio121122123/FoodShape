@@ -12,7 +12,17 @@
 
     <section class="profile-card">
       <div class="profile-heading">
-        <div class="avatar">{{ (account()?.fullName || account()?.email || 'FS').slice(0, 1).toUpperCase() }}</div>
+        <div class="avatar-container">
+          <button class="avatar-btn" type="button" (click)="openAvatarEditor()" title="Haga clic para cambiar o acomodar foto de perfil">
+            @if (account()?.avatarUrl) {
+              <img class="avatar-img" [src]="account()!.avatarUrl!" alt="Foto de perfil" />
+            } @else {
+              <span class="avatar-letter">{{ (account()?.fullName || account()?.email || 'FS').slice(0, 1).toUpperCase() }}</span>
+            }
+            <span class="avatar-badge">📷</span>
+          </button>
+          <button type="button" class="change-photo-link" (click)="openAvatarEditor()">Cambiar foto</button>
+        </div>
         <div>
           <span class="eyebrow">MI CUENTA</span>
           <h1>Mi perfil</h1>
@@ -79,4 +89,100 @@
       }
     </section>
   </main>
+
+  <!-- ── MODAL: CROP & ADJUST FOTO DE PERFIL ── -->
+  @if (showAvatarModal()) {
+    <div class="crop-modal-backdrop" (click)="closeAvatarEditor()">
+      <div class="crop-modal-card" (click)="$event.stopPropagation()">
+        <header class="crop-modal-header">
+          <div>
+            <h2>Foto de perfil</h2>
+            <p>Mueve y acomoda la foto dentro del círculo</p>
+          </div>
+          <button type="button" class="close-x" (click)="closeAvatarEditor()" aria-label="Cerrar">✕</button>
+        </header>
+
+        @if (!rawImageSrc()) {
+          <div class="empty-upload-box" (click)="fileInput.click()">
+            <span class="upload-icon">📷</span>
+            <strong>Seleccionar foto</strong>
+            <p>Haz clic para elegir una imagen desde tu dispositivo</p>
+            <small>JPG, PNG o WEBP</small>
+          </div>
+        } @else {
+          <!-- Viewport circular interactivo -->
+          <div class="crop-stage">
+            <div
+              class="crop-circle-viewport"
+              (mousedown)="startDrag($event)"
+              (mousemove)="onDrag($event)"
+              (mouseup)="endDrag()"
+              (mouseleave)="endDrag()"
+              (touchstart)="startDrag($event)"
+              (touchmove)="onDrag($event)"
+              (touchend)="endDrag()"
+              (wheel)="onWheel($event)"
+            >
+              <img
+                [src]="rawImageSrc()!"
+                alt="Encuadre"
+                class="crop-movable-img"
+                draggable="false"
+                [style.transform]="'translate(' + panX() + 'px, ' + panY() + 'px) scale(' + zoom() + ')'"
+              />
+              <div class="viewport-ring"></div>
+            </div>
+            <span class="crop-tip">↔ Arrastra para mover la imagen · Usa el zoom para ajustar</span>
+          </div>
+
+          <!-- Controles de Zoom y Ajustes -->
+          <div class="crop-controls">
+            <div class="zoom-slider-row">
+              <span class="zoom-icon">−</span>
+              <input
+                type="range"
+                min="0.6"
+                max="3"
+                step="0.05"
+                [value]="zoom()"
+                (input)="onZoomChange($event)"
+                class="zoom-slider"
+                aria-label="Nivel de zoom"
+              />
+              <span class="zoom-icon">＋</span>
+            </div>
+
+            <div class="crop-tools-row">
+              <button type="button" class="btn-tool" (click)="resetPosition()">↺ Centrar</button>
+              <button type="button" class="btn-tool" (click)="fileInput.click()">📁 Cambiar foto</button>
+            </div>
+          </div>
+        }
+
+        <input
+          #fileInput
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/*"
+          (change)="onFileSelected($event)"
+          style="display: none"
+        />
+
+        @if (avatarError()) {
+          <p class="crop-error" role="alert">{{ avatarError() }}</p>
+        }
+
+        <footer class="crop-modal-footer">
+          <button type="button" class="btn-cancel" (click)="closeAvatarEditor()">Cancelar</button>
+          <button
+            type="button"
+            class="btn-save"
+            [disabled]="savingAvatar() || !rawImageSrc()"
+            (click)="cropAndSave()"
+          >
+            {{ savingAvatar() ? 'Guardando…' : 'Guardar y aplicar foto' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  }
 </ion-content>

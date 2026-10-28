@@ -20,7 +20,22 @@
         <label>Dirección principal<input formControlName="address" [class.invalid]="isInvalid('address', 'donor')" placeholder="Calle, sector y ciudad" />@if (isInvalid('address', 'donor')) { <small class="field-error">Escribe una dirección de al menos 8 caracteres.</small> }</label>
         <label>Persona responsable<input formControlName="representativeName" [class.invalid]="isInvalid('representativeName', 'donor')" placeholder="Nombre y apellido" />@if (isInvalid('representativeName', 'donor')) { <small class="field-error">Indica la persona responsable.</small> }</label>
         <label>Ciudad<input formControlName="city" [class.invalid]="isInvalid('city', 'donor')" placeholder="Santo Domingo" /></label>
-        <label>Contraseña (mínimo 8 caracteres)<input formControlName="password" [class.invalid]="isInvalid('password', 'donor')" type="password" autocomplete="new-password" /></label>
+        <label>Contraseña (mínimo 8 caracteres)<div class="password-input-wrap">
+          <input formControlName="password" [class.invalid]="isInvalid('password', 'donor')" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" placeholder="••••••••" />
+          <button type="button" class="password-toggle-btn" (click)="togglePasswordVisibility()" [attr.aria-label]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'" [title]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'">
+            @if (showPassword()) {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            } @else {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            }
+          </button>
+        </div>@if (isInvalid('password', 'donor')) { <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small> }</label>
         <button class="primary" type="submit">Enviar registro</button><p class="form-note">La organización será revisada antes de publicar donaciones.</p>
       </form>
     } @else if (isRegister() && selectedRole() === 'beneficiary') {
@@ -34,7 +49,22 @@
         <div class="two"><label>Correo institucional<input formControlName="email" [class.invalid]="isInvalid('email', 'beneficiary')" type="email" placeholder="correo@institucion.org" />@if (isInvalid('email', 'beneficiary')) { <small class="field-error">Indica un correo válido.</small> }</label><label>Teléfono<input formControlName="phone" [class.invalid]="isInvalid('phone', 'beneficiary')" placeholder="(809) 000-0000" />@if (isInvalid('phone', 'beneficiary')) { <small class="field-error">Indica un teléfono válido.</small> }</label></div>
         <label>Dirección de recepción<input formControlName="address" [class.invalid]="isInvalid('address', 'beneficiary')" placeholder="Calle, sector y ciudad" />@if (isInvalid('address', 'beneficiary')) { <small class="field-error">Escribe una dirección de al menos 8 caracteres.</small> }</label><label>Persona responsable<input formControlName="representativeName" [class.invalid]="isInvalid('representativeName', 'beneficiary')" placeholder="Nombre y apellido" />@if (isInvalid('representativeName', 'beneficiary')) { <small class="field-error">Indica la persona responsable.</small> }</label>
                 <label>Ciudad<input formControlName="city" [class.invalid]="isInvalid('city', 'beneficiary')" placeholder="Santo Domingo" /></label>
-        <label>Contraseña (mínimo 8 caracteres)<input formControlName="password" [class.invalid]="isInvalid('password', 'beneficiary')" type="password" autocomplete="new-password" /></label>
+        <label>Contraseña (mínimo 8 caracteres)<div class="password-input-wrap">
+          <input formControlName="password" [class.invalid]="isInvalid('password', 'beneficiary')" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" placeholder="••••••••" />
+          <button type="button" class="password-toggle-btn" (click)="togglePasswordVisibility()" [attr.aria-label]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'" [title]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'">
+            @if (showPassword()) {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            } @else {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            }
+          </button>
+        </div>@if (isInvalid('password', 'beneficiary')) { <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small> }</label>
         <button class="primary" type="submit">Enviar registro</button><p class="form-note">La institución será revisada antes de solicitar donaciones.</p>
       </form>
     } @else if (isRegister() && selectedRole() === 'volunteer') {
@@ -48,7 +78,22 @@
         @if (showOtherTransportType()) { <label>Especifica el transporte<input formControlName="otherTransportType" [class.invalid]="isInvalid('otherTransportType', 'volunteer')" placeholder="Ej. Camioneta" />@if (isInvalid('otherTransportType', 'volunteer')) { <small class="field-error">Especifica el transporte.</small> }</label> }
         <label>Zona aproximada de disponibilidad<input formControlName="availabilityZone" [class.invalid]="isInvalid('availabilityZone', 'volunteer')" placeholder="Sector o ciudad" type="text" (keydown.enter)="$event.preventDefault()" />@if (isInvalid('availabilityZone', 'volunteer')) { <small class="field-error">Indica una zona de disponibilidad.</small> }</label>
         <label class="check"><input formControlName="volunteerAgreement" type="checkbox" /> Confirmo que puedo participar de forma voluntaria.</label>@if (isInvalid('volunteerAgreement', 'volunteer')) { <small class="field-error agreement-error">Debes confirmar tu participación voluntaria.</small> }
-                <label>Contraseña (mínimo 8 caracteres)<input formControlName="password" [class.invalid]="isInvalid('password', 'volunteer')" type="password" autocomplete="new-password" /></label>
+                <label>Contraseña (mínimo 8 caracteres)<div class="password-input-wrap">
+          <input formControlName="password" [class.invalid]="isInvalid('password', 'volunteer')" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" placeholder="••••••••" />
+          <button type="button" class="password-toggle-btn" (click)="togglePasswordVisibility()" [attr.aria-label]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'" [title]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'">
+            @if (showPassword()) {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            } @else {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            }
+          </button>
+        </div>@if (isInvalid('password', 'volunteer')) { <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small> }</label>
         <button class="primary" type="submit">Enviar registro</button><p class="form-note">Podrás actualizar tu disponibilidad desde tu perfil.</p>
       </form>
     } @else {
@@ -56,7 +101,22 @@
       <form [formGroup]="loginForm" (ngSubmit)="submitLogin()" novalidate>
         @if (loginError()) { <p class="field-error login-error" role="alert">{{ loginError() }}</p> }
         <label>Correo electrónico<input formControlName="email" [class.invalid]="isInvalid('email', 'login')" type="email" placeholder="nombre@gmail.com" />@if (isInvalid('email', 'login')) { <small class="field-error">Indica un correo válido.</small> }</label>
-        <label>Contraseña<input formControlName="password" [class.invalid]="isInvalid('password', 'login')" type="password" placeholder="••••••••" />@if (isInvalid('password', 'login')) { <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small> }</label>
+        <label>Contraseña<div class="password-input-wrap">
+          <input formControlName="password" [class.invalid]="isInvalid('password', 'login')" [type]="showPassword() ? 'text' : 'password'" autocomplete="current-password" placeholder="••••••••" />
+          <button type="button" class="password-toggle-btn" (click)="togglePasswordVisibility()" [attr.aria-label]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'" [title]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'">
+            @if (showPassword()) {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            } @else {
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            }
+          </button>
+        </div>@if (isInvalid('password', 'login')) { <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small> }</label>
         <button class="primary" type="submit">Iniciar sesión</button>
         <div class="divider">o</div>
         <button type="button" class="google-button" (click)="loginWithGoogle()">Continuar con Google</button>

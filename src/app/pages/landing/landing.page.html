@@ -5,7 +5,7 @@
     <div class="nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#roles">Para quién es</a><a href="#impacto">Impacto</a><a href="#preguntas">Preguntas</a></div>
     @if (dashboardRoute(); as route) {
       <a class="nav-profile-pill" [routerLink]="route" title="Ir a mi panel">
-        <span class="nav-avatar">{{ avatarLetter() }}</span>
+        <span class="nav-avatar" [class.has-photo]="avatarUrl()">@if (avatarUrl()) {<img [src]="avatarUrl()!" alt="Foto" class="nav-avatar-img" />} @else {{{ avatarLetter() }}}</span>
         <span class="nav-profile-name">{{ displayName() }}</span>
       </a>
     } @else {

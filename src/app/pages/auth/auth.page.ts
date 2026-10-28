@@ -37,6 +37,11 @@ export class AuthPage {
   readonly registrationError = signal('');
   readonly organizationCategories = signal<import('../../services/auth.service').OrganizationCategory[]>([]);
   readonly catalogError = signal('');
+  readonly showPassword = signal(false);
+
+  togglePasswordVisibility(): void {
+    this.showPassword.update((visible) => !visible);
+  }
 
   readonly loginForm = this.formBuilder.group({
     email: ['', [Validators.required, Validators.email]],

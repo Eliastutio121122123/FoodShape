@@ -27,6 +27,8 @@ export class VolunteerPage implements OnInit {
   readonly togglingAvailability = signal(false);
 
   // ── Datos derivados del perfil ─────────────────────────────────────
+  readonly avatarUrl = computed(() => this.profile()?.avatarUrl ?? this.auth.currentAvatarUrl() ?? null);
+
   readonly avatarLetter = computed(() => {
     const name = this.profile()?.fullName || this.session()?.email || '';
     return name.slice(0, 1).toUpperCase();

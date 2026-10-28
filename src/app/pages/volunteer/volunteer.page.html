@@ -3,7 +3,7 @@
     <header class="mobile-topbar"><button (click)="toggleMenu()">☰</button><a routerLink="/" class="mobile-brand"><i>⌁</i>FoodShare</a><button class="notification">♧<b></b></button></header>
     <aside class="sidebar" [class.open]="menuOpen()">
       <a routerLink="/" class="brand"><i>⌁</i>FoodShare</a>
-      <div class="volunteer-profile"><span>{{ avatarLetter() }}</span><div><strong>{{ displayName() }}</strong><small>Voluntario activo</small></div></div>
+      <div class="volunteer-profile"><span class="vp-avatar" [class.has-photo]="avatarUrl()">@if (avatarUrl()) {<img [src]="avatarUrl()!" alt="Foto" class="vp-photo" />} @else {{{ avatarLetter() }}}</span><div><strong>{{ displayName() }}</strong><small>Voluntario activo</small></div></div>
       <span class="menu-label">MI ESPACIO</span>
       <nav>
         <button [class.active]="section() === 'dashboard'" (click)="select('dashboard')"><i>⌂</i> Inicio</button>
@@ -16,7 +16,7 @@
         <p>{{ isAvailable() ? 'Recibirás alertas de entregas cercanas.' : 'No recibirás nuevas asignaciones.' }}</p>
       </div>
       <div class="sidebar-card"><span>♥</span><strong>Tu ayuda importa</strong><p>Cada entrega conecta alimentos con quienes los necesitan.</p></div>
-      <button class="profile" (click)="openProfile()"><span>{{ avatarLetter() }}</span><div><strong>{{ displayName() }}</strong><small>Mi perfil · Voluntariado</small></div><b>⌄</b></button>
+      <button class="profile" (click)="openProfile()"><span class="vp-avatar" [class.has-photo]="avatarUrl()">@if (avatarUrl()) {<img [src]="avatarUrl()!" alt="Foto" class="vp-photo" />} @else {{{ avatarLetter() }}}</span><div><strong>{{ displayName() }}</strong><small>Mi perfil · Voluntariado</small></div><b>⌄</b></button>
     </aside>
 
     <section class="main-area">

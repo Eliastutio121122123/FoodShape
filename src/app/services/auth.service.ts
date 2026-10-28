@@ -66,6 +66,7 @@ export interface AccountProfile {
   phone: string;
   role: AppRole;
   status: string;
+  avatarUrl?: string | null;
   organization?: {
     name: string;
     organizationType: string;
@@ -97,6 +98,8 @@ export class AuthService {
   private readonly sessionState = signal<AuthSession | null>(null);
   private readonly readyPromise: Promise<void>;
   private readonly applicationsState = signal<readonly OrganizationApplication[]>([]);
+  private readonly currentAvatarState = signal<string | null>(null);
+  readonly currentAvatarUrl = this.currentAvatarState.asReadonly();
   readonly session = this.sessionState.asReadonly();
   readonly organizationApplications = this.applicationsState.asReadonly();
   readonly pendingOrganizations = computed(() => this.applicationsState().filter((application) => application.status === 'pending'));
@@ -181,6 +184,18 @@ export class AuthService {
         .eq('id', user.id).single();
       if (profileError) throw profileError;
 
+      let avatarUrl: string | null = null;
+      try {
+        avatarUrl = localStorage.getItem('foodshare_avatar_' + user.id);
+      } catch {}
+      if (!avatarUrl && user.user_metadata && user.user_metadata['avatar_url']) {
+        avatarUrl = user.user_metadata['avatar_url'] as string;
+      }
+      if (!avatarUrl && (profile as Record<string, unknown>)['avatar_url']) {
+        avatarUrl = (profile as Record<string, unknown>)['avatar_url'] as string;
+      }
+      this.currentAvatarState.set(avatarUrl);
+
       const account: AccountProfile = {
         id: profile.id,
         email: profile.email,
@@ -188,6 +203,7 @@ export class AuthService {
         phone: profile.phone,
         role: profile.role as AppRole,
         status: profile.status,
+        avatarUrl,
       };
 
       if (account.role === 'donor' || account.role === 'beneficiary') {
@@ -523,9 +539,34 @@ export class AuthService {
     })());
   }
 
+  saveProfilePhoto(avatarDataUrl: string): Observable<string> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Sesión requerida.');
+
+      try {
+        localStorage.setItem('foodshare_avatar_' + user.id, avatarDataUrl);
+      } catch {}
+
+      try {
+        await this.supabase.auth.updateUser({ data: { avatar_url: avatarDataUrl } });
+      } catch (err) {
+        console.warn('No se pudo guardar avatar en metadata', err);
+      }
+
+      try {
+        await this.supabase.from('profiles').update({ avatar_url: avatarDataUrl }).eq('id', user.id);
+      } catch {}
+
+      this.currentAvatarState.set(avatarDataUrl);
+      return avatarDataUrl;
+    })());
+  }
+
   async signOut(): Promise<void> {
     const { error } = await this.supabase.auth.signOut({ scope: 'local' });
     this.sessionState.set(null);
+    this.currentAvatarState.set(null);
     if (error) throw error;
   }
 
@@ -535,6 +576,10 @@ export class AuthService {
   }
 
   private async loadSession(userId: string, email: string): Promise<void> {
+    try {
+      const savedAvatar = localStorage.getItem('foodshare_avatar_' + userId);
+      if (savedAvatar) this.currentAvatarState.set(savedAvatar);
+    } catch {}
     const role = await this.getActiveRole(userId);
     if (!role) { this.sessionState.set(null); return; }
     this.sessionState.set({ email, role });
