@@ -10,6 +10,11 @@ as $$
 begin
   if new.verification_status = 'approved'
      and old.verification_status is distinct from new.verification_status then
+    update public.profiles
+    set status = 'active', updated_at = pg_catalog.now()
+    where id = new.owner_id
+      and status = 'pending';
+
     update auth.users as auth_user
     set email_confirmed_at = coalesce(auth_user.email_confirmed_at, pg_catalog.now())
     where auth_user.id = new.owner_id
@@ -37,3 +42,11 @@ from public.organizations as organizations
 where organizations.owner_id = users.id
   and organizations.verification_status = 'approved'
   and users.email_confirmed_at is null;
+
+update public.profiles as profiles
+set status = 'active', updated_at = pg_catalog.now()
+from public.organizations as organizations
+where organizations.owner_id = profiles.id
+  and organizations.verification_status = 'approved'
+  and organizations.status = 'active'
+  and profiles.status = 'pending';
