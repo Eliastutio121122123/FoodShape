@@ -1,6 +1,6 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 3 de noviembre de 2026.
+**Estado revisado:** 4 de noviembre de 2026.
 
 Este documento conserva el alcance funcional acordado y describe quÃ© partes estÃ¡n implementadas en el cÃ³digo, cuÃ¡les existen solo en la base de datos y cuÃ¡les aÃºn estÃ¡n pendientes. Una tabla o una pantalla por sÃ­ sola no significa que una funcionalidad estÃ© completa: para considerarla conectada, el flujo debe guardar y leer datos persistentes y aplicar los permisos correspondientes.
 
@@ -44,8 +44,8 @@ Estados usados:
 
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
-| 4 | Registro y gestion de instituciones donantes | Parcial | El registro crea la organizacion en Supabase. El panel administrativo consulta estados pendiente, verificada y rechazada, permite buscar y aprobar o rechazar pendientes; falta completar la gestion de datos institucionales.
-| 5 | Registro y gestion de instituciones beneficiarias | Parcial | El registro crea la organizacion en Supabase. El panel administrativo consulta estados pendiente, verificada y rechazada, permite buscar y aprobar o rechazar pendientes; falta completar la gestion de datos institucionales.
+| 4 | Registro y gestion de instituciones donantes | Parcial | El registro crea la organizacion en Supabase. El panel administrativo consulta estados pendiente, verificada y rechazada, permite buscar y aprobar o rechazar pendientes; la migracion `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth de organizaciones aprobadas; falta completar la gestion de datos institucionales y aplicar la migracion remota.
+| 5 | Registro y gestion de instituciones beneficiarias | Parcial | El registro crea la organizacion en Supabase. El panel administrativo consulta estados pendiente, verificada y rechazada, permite buscar y aprobar o rechazar pendientes; la migracion `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth de organizaciones aprobadas; falta completar la gestion de datos institucionales y aplicar la migracion remota.
 | 6 | Registro y gestiÃ³n de voluntarios | Parcial | El trigger crea `volunteer_profiles`. La ediciÃ³n persistente del perfil y de disponibilidad aÃºn no estÃ¡ conectada. |
 | 24 | Gestion administrativa de usuarios e instituciones | Parcial | La lista de usuarios y las vistas por estado de las instituciones consultan Supabase. Se puede buscar, aprobar y rechazar instituciones pendientes. La gestion de estados de cuentas y otras areas del panel siguen pendientes.
 
@@ -158,8 +158,8 @@ Las pantallas de donantes, beneficiarios y voluntariado aun muestran ejemplos. S
 
 - **Voluntariado:** una cuenta revisada en Supabase tenía `profiles.role = 'volunteer'`, `profiles.status = 'active'` y `volunteer_profiles.status = 'available'`. La política `profiles_select` estaba habilitada y permitía leer el perfil propio. En el navegador, Auth respondía HTTP 200, pero la consulta REST de `profiles` respondía HTTP 520.
 - **Metadatos Auth demasiado grandes:** la misma cuenta tenía `raw_user_meta_data` de 50,056 bytes; `avatar_url` ocupaba 49,717 bytes. Después de retirar ese campo, una consulta de auditoría encontró cero cuentas con `avatar_url` mayor de 4 KB. No guardar imágenes codificadas en base64 dentro de `auth.users.raw_user_meta_data`: esos metadatos se incluyen en respuestas y tokens de Auth y pueden causar solicitudes demasiado grandes.
-- **Institución donante:** la organización apareció aprobada, pero la cuenta Auth asociada tenía `email_confirmed_at = NULL` y `banned_until = NULL`. La aprobación institucional no confirma el correo. Supabase bloquea el login por contraseña hasta que se confirme el correo. Revisar primero el código de respuesta de Auth; un 400 en `token?grant_type=password` ocurre antes de validar el perfil de FoodShare.
-- **Mensajes de autenticación:** la pantalla distingue `email_not_confirmed`, `invalid_credentials` y perfiles pendientes. El mensaje de registro institucional informa tanto la confirmación del correo como la verificación administrativa.
+- **Institución donante:** la organización aprobada tenía `email_confirmed_at = NULL`, así que Auth bloqueaba el login antes de validar el perfil. La migración `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth al aprobar organizaciones y repara las que ya estaban aprobadas. Debe aplicarse en el proyecto remoto para habilitar las cuentas existentes.
+- **Mensajes de autenticación:** la pantalla distingue `email_not_confirmed`, `invalid_credentials` y perfiles pendientes. El registro institucional informa que podrá iniciar sesión cuando administración verifique la institución; los voluntarios mantienen la confirmación habitual por correo.
 - **Persistencia de sesión:** los guards restauran la sesión persistida antes de decidir una redirección. El evento inicial de Supabase Auth no debe borrar el estado restaurado. La sesión se elimina al cerrar sesión; usar otro navegador o borrar el almacenamiento local equivale a una sesión nueva.
 - **Configuración en rutas internas:** `runtime-config.js` debe cargarse desde `/assets/runtime-config.js`. Una ruta relativa podía buscar el archivo bajo `/app/assets/` al recargar una URL profunda como `/app/profile`, dejar activo el valor de reserva `your_project_ref` y hacer que el guard confundiera una falla de configuración con una sesión cerrada.
 - **Fotos de perfil:** la foto se sube al bucket público `foodshare-avatars`, con límite de 2 MB y políticas que restringen la escritura a la carpeta del UID autenticado. `profiles.avatar_path` conserva solo la ruta corta; la URL pública se genera desde Storage. Aplicar `supabase/migrations/20261104000000_foodshare_profile_avatars_storage.sql` al proyecto Supabase antes de desplegar esta versión. Nunca guardar el Data URL de la imagen en Auth metadata ni en una columna de perfil.

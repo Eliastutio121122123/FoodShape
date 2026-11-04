@@ -17,7 +17,7 @@ El repositorio Git ya tiene el remoto `Eliastutio121122123/FoodShare` y el direc
 
 Supabase observa commits y aplica migraciones nuevas que encuentre en `supabase/migrations`. Al conectarla, revisa cuidadosamente la primera ejecución para confirmar que la migración corresponde a una base nueva o que el historial remoto está alineado; no es una sincronización que copie datos de SQL Server. Las ramas de preview de Supabase son opcionales y requieren Branching habilitado en el plan del proyecto.
 
-El registro de voluntarios queda activo al confirmar la cuenta. Los registros de organizaciones se crean pendientes y no pueden entrar al panel hasta su aprobación por un administrador.
+El registro de voluntarios queda activo al confirmar la cuenta. Los registros de organizaciones se crean pendientes y no pueden entrar al panel hasta su aprobación por un administrador. Al aprobar una organización, la base confirma también el correo de Auth de su propietario, de modo que pueda iniciar sesión sin esperar el enlace de confirmación.
 
 ## Crear el primer administrador
 
@@ -45,4 +45,4 @@ Las fotos de perfil se guardan en Storage, en el bucket público `foodshare-avat
 
 Antes de desplegar la función de fotos, aplica `migrations/20261104000000_foodshare_profile_avatars_storage.sql`. Desde la raíz del repositorio vinculado se puede usar `supabase db push`; alternativamente, ejecuta el SQL de la migración en Dashboard > SQL Editor. El bucket limita las imágenes a 2 MB y las políticas restringen la escritura a la carpeta del usuario autenticado.
 
-La aprobación administrativa de una organización no confirma el correo de Auth. Si el login falla con HTTP 400 en `token?grant_type=password`, revisa el cuerpo de la respuesta y `auth.users.email_confirmed_at`; cuando está en `NULL`, el usuario debe confirmar su correo antes de iniciar sesión con contraseña. Un HTTP 200 de Auth seguido por un fallo HTTP 520 en `/rest/v1/profiles` indica un problema posterior, en la API de datos.
+La migración `migrations/20261104120000_confirm_organization_email_on_approval.sql` vincula aprobación y acceso: al pasar una organización a `approved`, un trigger confirma el correo Auth de su propietario. También confirma las cuentas de organizaciones que ya estaban aprobadas cuando se ejecuta la migración. Aplica esta migración al proyecto remoto para habilitar a las instituciones ya aprobadas; no requiere una llave `service_role` en el cliente. Los voluntarios siguen teniendo que confirmar su correo. Un HTTP 200 de Auth seguido por un fallo HTTP 520 en `/rest/v1/profiles` indica un problema posterior, en la API de datos.

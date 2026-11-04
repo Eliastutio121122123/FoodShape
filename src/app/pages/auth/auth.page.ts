@@ -165,7 +165,7 @@ export class AuthPage {
     }
     this.auth.registerAccount(payload).subscribe({
       next: (result) => this.registrationMessage.set(result.status === 'pending'
-        ? 'Registro guardado. Confirma tu correo y, cuando administración verifique la institución, podrás iniciar sesión.'
+        ? 'Registro guardado. Cuando administración verifique la institución, podrás iniciar sesión.'
         : 'Registro guardado. Revisa tu correo y luego inicia sesion.'),
       error: (error: Error) => this.registrationError.set(error.message || 'No se pudo guardar el registro en Supabase.'),
     });
