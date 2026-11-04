@@ -240,11 +240,11 @@ export class ProfilePage {
         const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
         this.auth.saveProfilePhoto(croppedDataUrl).subscribe({
-          next: () => {
+          next: (avatarUrl) => {
             this.savingAvatar.set(false);
             const current = this.account();
             if (current) {
-              this.account.set({ ...current, avatarUrl: croppedDataUrl });
+              this.account.set({ ...current, avatarUrl });
             }
             this.closeAvatarEditor();
             this.successMessage.set('Foto de perfil guardada exitosamente.');

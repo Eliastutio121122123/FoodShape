@@ -1,6 +1,6 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 27 de octubre de 2026.
+**Estado revisado:** 3 de noviembre de 2026.
 
 Este documento conserva el alcance funcional acordado y describe quÃ© partes estÃ¡n implementadas en el cÃ³digo, cuÃ¡les existen solo en la base de datos y cuÃ¡les aÃºn estÃ¡n pendientes. Una tabla o una pantalla por sÃ­ sola no significa que una funcionalidad estÃ© completa: para considerarla conectada, el flujo debe guardar y leer datos persistentes y aplicar los permisos correspondientes.
 
@@ -37,7 +37,7 @@ Estados usados:
 |---|---|---|---|
 | 1 | Registro de usuarios | Parcial | Hay formularios por rol y una llamada a Supabase Auth. El trigger crea el perfil y los datos de organizacion o voluntariado. El endpoint Auth responde HTTP 200 desde el entorno local, pero en la interfaz se observo `Failed to fetch`; falta capturar y confirmar el registro completo en el navegador. |
 | 2 | Inicio de sesion y autenticacion | Parcial | El servicio implementa acceso con correo y contrasena y restauracion de sesion. Tras iniciar sesion, la app abre primero la pantalla Mi perfil; desde alli se puede volver al panel del rol. La conexion fue exitosa en la captura reciente (HTTP 200). |
-| 3 | Gestion de perfiles y roles | Parcial | Hay una pantalla comun de perfil para los cuatro roles. El usuario puede editar nombre y telefono; correo y rol son de solo lectura. Los datos institucionales y de voluntariado se muestran, pero aun no se editan desde esta pantalla. |
+| 3 | Gestion de perfiles y roles | Parcial | Hay una pantalla comun de perfil para los cuatro roles. El usuario puede editar nombre y telefono; correo y rol son de solo lectura. El editor de foto usa Supabase Storage y `profiles.avatar_path`; falta aplicar la migracion `20261104000000_foodshare_profile_avatars_storage.sql` en el proyecto remoto. Los datos institucionales y de voluntariado se muestran, pero aun no se editan desde esta pantalla. |
 | 30 | Permisos segun el rol | Parcial | Hay guards de Angular y politicas RLS en la migracion. Falta integrar las operaciones de negocio restantes y validar los permisos en el proyecto remoto. |
 
 ### 3.2 Instituciones y voluntariado
@@ -103,10 +103,10 @@ Estados usados:
 
 ## 4. Funciones conectadas actualmente
 
-1. **Autenticacion y perfiles:** `AuthService` usa Supabase Auth para registro, inicio de sesion por contrasena y OAuth con Google. La creacion del perfil depende del trigger incluido en la migracion. El endpoint Auth y el preflight CORS responden desde el entorno local, pero el formulario mostro `Failed to fetch`; el flujo desde navegador sigue pendiente de diagnostico.
+1. **Autenticacion y perfiles:** `AuthService` usa Supabase Auth para registro, inicio de sesion por contrasena y OAuth con Google. La creacion del perfil depende del trigger incluido en la migracion. Se identificaron dos causas distintas de bloqueo: metadata `avatar_url` excesiva que generaba HTTP 520 en la API REST, y cuentas con `email_confirmed_at = NULL` que reciben HTTP 400 al autenticarse. La interfaz ahora distingue esos errores.
 2. **Control de sesiÃ³n y rutas:** se restaura la sesiÃ³n y los guards protegen los paneles segÃºn el rol almacenado en `profiles`.
 3. **Revision de organizaciones:** el panel administrativo consulta instituciones pendientes, verificadas y rechazadas, permite buscar por nombre, correo o representante y actualiza aprobacion/rechazo en Supabase con RLS.
-4. **Perfil personal:** todos los paneles muestran una entrada de perfil con el correo de la sesion. La pagina comun obtiene nombre, correo, telefono y rol del perfil autenticado; permite cambiar nombre y telefono, muestra informacion asociada de organizaciones o voluntariado e incluye cierre de sesion local. Despues de iniciar sesion con correo o Google, se abre primero esta pantalla.
+4. **Perfil personal:** todos los paneles muestran una entrada de perfil con el correo de la sesion. La pagina comun obtiene nombre, correo, telefono, rol y ruta de foto del perfil autenticado; permite cambiar nombre y telefono, subir/cambiar foto en Storage, muestra informacion asociada de organizaciones o voluntariado e incluye cierre de sesion local. Despues de iniciar sesion con correo o Google, se abre primero esta pantalla.
 5. **Dashboard administrativo:** las tarjetas, la distribucion de donaciones activas, los ultimos seis meses de cantidades publicadas y las donaciones recientes se consultan desde Supabase. Las cantidades se convierten a kg solo para unidades kg, g y lb.
 6. **Reportes administrativos:** consulta donaciones no canceladas creadas en el periodo y entregas completadas cuya fecha de entrega cae en ese periodo. Permite descargar un CSV con totales, desglose por categoria y donaciones. Los kg solo se estiman para unidades kg, g y lb.
 7. **Esquema y permisos base:** la migracion inicial define tablas y politicas RLS. Que una tabla exista no significa que todos los servicios Angular esten conectados.
@@ -153,3 +153,12 @@ Las pantallas de donantes, beneficiarios y voluntariado aun muestran ejemplos. S
 - No exponer claves `secret` o `service_role` en Angular, `.env.example`, el bundle del navegador ni GitHub.
 - Cualquier nuevo flujo persistente debe tener migraciÃ³n, polÃ­ticas RLS, integraciÃ³n Angular, estados de carga/error y actualizaciÃ³n de esta lista de estado.
 - No marcar un requerimiento como implementado mientras use datos de `InMemoryCrudService` o no se haya comprobado el flujo completo contra Supabase.
+
+## 9. Diagnóstico reciente de autenticación y fotos de perfil
+
+- **Voluntariado:** una cuenta revisada en Supabase tenía `profiles.role = 'volunteer'`, `profiles.status = 'active'` y `volunteer_profiles.status = 'available'`. La política `profiles_select` estaba habilitada y permitía leer el perfil propio. En el navegador, Auth respondía HTTP 200, pero la consulta REST de `profiles` respondía HTTP 520.
+- **Metadatos Auth demasiado grandes:** la misma cuenta tenía `raw_user_meta_data` de 50,056 bytes; `avatar_url` ocupaba 49,717 bytes. Después de retirar ese campo, una consulta de auditoría encontró cero cuentas con `avatar_url` mayor de 4 KB. No guardar imágenes codificadas en base64 dentro de `auth.users.raw_user_meta_data`: esos metadatos se incluyen en respuestas y tokens de Auth y pueden causar solicitudes demasiado grandes.
+- **Institución donante:** la organización apareció aprobada, pero la cuenta Auth asociada tenía `email_confirmed_at = NULL` y `banned_until = NULL`. La aprobación institucional no confirma el correo. Supabase bloquea el login por contraseña hasta que se confirme el correo. Revisar primero el código de respuesta de Auth; un 400 en `token?grant_type=password` ocurre antes de validar el perfil de FoodShare.
+- **Mensajes de autenticación:** la pantalla distingue `email_not_confirmed`, `invalid_credentials` y perfiles pendientes. El mensaje de registro institucional informa tanto la confirmación del correo como la verificación administrativa.
+- **Fotos de perfil:** la foto se sube al bucket público `foodshare-avatars`, con límite de 2 MB y políticas que restringen la escritura a la carpeta del UID autenticado. `profiles.avatar_path` conserva solo la ruta corta; la URL pública se genera desde Storage. Aplicar `supabase/migrations/20261104000000_foodshare_profile_avatars_storage.sql` al proyecto Supabase antes de desplegar esta versión. Nunca guardar el Data URL de la imagen en Auth metadata ni en una columna de perfil.
+- **Migración de voluntarios:** `supabase/migrations/20261103000000_activate_existing_volunteers.sql` repara perfiles de voluntarios pendientes y crea perfiles faltantes. No se confirmó su aplicación al proyecto remoto durante esta revisión.

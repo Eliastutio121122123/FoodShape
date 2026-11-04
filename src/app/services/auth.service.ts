@@ -187,20 +187,19 @@ export class AuthService {
       if (userError || !user) throw userError ?? new Error('Inicia sesiÃƒÂ³n para consultar tu perfil.');
 
       const { data: profile, error: profileError } = await this.supabase.from('profiles')
-        .select('id, email, full_name, phone, role, status')
+        .select('id, email, full_name, phone, role, status, avatar_path')
         .eq('id', user.id).single();
       if (profileError) throw profileError;
 
-      let avatarUrl: string | null = null;
+      const avatarPath = profile.avatar_path as string | null;
+      const avatarUrl = avatarPath
+        ? this.supabase.storage.from('foodshare-avatars').getPublicUrl(avatarPath).data.publicUrl
+        : null;
       try {
-        avatarUrl = localStorage.getItem('foodshare_avatar_' + user.id);
-      } catch {}
-      if (!avatarUrl && user.user_metadata && user.user_metadata['avatar_url']) {
-        avatarUrl = user.user_metadata['avatar_url'] as string;
-      }
-      if (!avatarUrl && (profile as Record<string, unknown>)['avatar_url']) {
-        avatarUrl = (profile as Record<string, unknown>)['avatar_url'] as string;
-      }
+        const cacheKey = 'foodshare_avatar_' + user.id;
+        if (avatarUrl) localStorage.setItem(cacheKey, avatarUrl);
+        else localStorage.removeItem(cacheKey);
+      } catch { /* The database path remains the source of truth if local storage is unavailable. */ }
       this.currentAvatarState.set(avatarUrl);
 
       const account: AccountProfile = {
@@ -551,22 +550,40 @@ export class AuthService {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
       if (userError || !user) throw userError ?? new Error('Sesión requerida.');
 
-      try {
-        localStorage.setItem('foodshare_avatar_' + user.id, avatarDataUrl);
-      } catch {}
+      const image = await fetch(avatarDataUrl).then((response) => response.blob());
+      if (!image.type.startsWith('image/')) throw new Error('El archivo seleccionado no es una imagen válida.');
+      if (image.size > 2 * 1024 * 1024) throw new Error('La foto debe pesar menos de 2 MB.');
 
-      try {
-        await this.supabase.auth.updateUser({ data: { avatar_url: avatarDataUrl } });
-      } catch (err) {
-        console.warn('No se pudo guardar avatar en metadata', err);
+      const { data: currentProfile, error: currentProfileError } = await this.supabase
+        .from('profiles').select('avatar_path').eq('id', user.id).maybeSingle();
+      if (currentProfileError) throw currentProfileError;
+
+      const extension = image.type === 'image/png' ? 'png' : image.type === 'image/webp' ? 'webp' : 'jpg';
+      const path = `${user.id}/${crypto.randomUUID()}.${extension}`;
+      const bucket = this.supabase.storage.from('foodshare-avatars');
+      const { error: uploadError } = await bucket.upload(path, image, {
+        cacheControl: '3600', upsert: false, contentType: image.type,
+      });
+      if (uploadError) throw uploadError;
+
+      const { error: profileError } = await this.supabase.from('profiles')
+        .update({ avatar_path: path }).eq('id', user.id);
+      if (profileError) {
+        await bucket.remove([path]);
+        throw profileError;
       }
 
-      try {
-        await this.supabase.from('profiles').update({ avatar_url: avatarDataUrl }).eq('id', user.id);
-      } catch {}
+      const avatarUrl = bucket.getPublicUrl(path).data.publicUrl;
+      this.currentAvatarState.set(avatarUrl);
+      try { localStorage.setItem('foodshare_avatar_' + user.id, avatarUrl); } catch {}
 
-      this.currentAvatarState.set(avatarDataUrl);
-      return avatarDataUrl;
+      const oldPath = currentProfile?.avatar_path as string | null | undefined;
+      if (oldPath && oldPath.startsWith(`${user.id}/`)) {
+        const { error: removeError } = await bucket.remove([oldPath]);
+        if (removeError) console.warn('No se pudo borrar la foto de perfil anterior.', removeError);
+      }
+
+      return avatarUrl;
     })());
   }
 
@@ -584,8 +601,13 @@ export class AuthService {
 
   private async loadSession(userId: string, email: string): Promise<void> {
     try {
-      const savedAvatar = localStorage.getItem('foodshare_avatar_' + userId);
-      if (savedAvatar) this.currentAvatarState.set(savedAvatar);
+      const cacheKey = 'foodshare_avatar_' + userId;
+      const cachedAvatar = localStorage.getItem(cacheKey);
+      if (cachedAvatar?.startsWith('https://') && cachedAvatar.length < 2048) {
+        this.currentAvatarState.set(cachedAvatar);
+      } else {
+        localStorage.removeItem(cacheKey);
+      }
     } catch {}
     const role = await this.getActiveRole(userId);
     if (!role) { this.sessionState.set(null); return; }

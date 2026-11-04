@@ -38,3 +38,11 @@ Con Docker y Supabase CLI instalados, ejecuta `npx supabase start` desde esta ca
 ## Alcance de esta migración
 
 La migración crea las entidades centrales del dominio y las reglas RLS. El panel admin ya puede listar y aprobar/rechazar organizaciones. Las pantallas de donaciones, solicitudes, entregas y reportes aún tienen áreas con datos de demostración; sus servicios se conectarán a estas tablas en los siguientes pasos. La API ASP.NET Core y los scripts `database/sqlserver` quedan como legado y ya no se levantan desde `compose.yaml`.
+
+## Fotos de perfil y diagnóstico de acceso
+
+Las fotos de perfil se guardan en Storage, en el bucket público `foodshare-avatars`, con objetos dentro de la carpeta del UID de cada usuario. La tabla `public.profiles` conserva solo `avatar_path`; no guardes Data URLs ni imágenes base64 en `auth.users.raw_user_meta_data`, porque esos metadatos se incluyen en solicitudes de Auth y pueden causar respuestas HTTP 520 por el tamaño de los encabezados.
+
+Antes de desplegar la función de fotos, aplica `migrations/20261104000000_foodshare_profile_avatars_storage.sql`. Desde la raíz del repositorio vinculado se puede usar `supabase db push`; alternativamente, ejecuta el SQL de la migración en Dashboard > SQL Editor. El bucket limita las imágenes a 2 MB y las políticas restringen la escritura a la carpeta del usuario autenticado.
+
+La aprobación administrativa de una organización no confirma el correo de Auth. Si el login falla con HTTP 400 en `token?grant_type=password`, revisa el cuerpo de la respuesta y `auth.users.email_confirmed_at`; cuando está en `NULL`, el usuario debe confirmar su correo antes de iniciar sesión con contraseña. Un HTTP 200 de Auth seguido por un fallo HTTP 520 en `/rest/v1/profiles` indica un problema posterior, en la API de datos.

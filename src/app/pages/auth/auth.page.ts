@@ -103,12 +103,20 @@ export class AuthPage {
         this.auth.signIn(result.email, result.role);
         void this.router.navigateByUrl('/app/profile');
       },
-      error: (error: { code?: string; message?: string }) => {
-        const invalidCredentials = error.code === 'invalid_credentials'
-          || /invalid login credentials/i.test(error.message || '');
-        this.loginError.set(invalidCredentials
-          ? 'Correo o contrasena incorrectos.'
-          : error.message || 'No se pudo conectar con Supabase. Revisa la configuracion e intentalo de nuevo.');
+      error: (error: { status?: number; code?: string; message?: string }) => {
+        const code = error.code?.toLowerCase();
+        const message = error.message || '';
+        if (code === 'email_not_confirmed') {
+          this.loginError.set('Confirma tu correo electrónico desde el enlace que te envió FoodShare para poder iniciar sesión.');
+        } else if (code === 'invalid_credentials' || /invalid login credentials/i.test(message)) {
+          this.loginError.set('El correo o la contraseña no coinciden. Verifica tus datos o restablece la contraseña.');
+        } else if (/perfil|organización.*pendiente|cuenta.*inactiva/i.test(message)) {
+          this.loginError.set(message);
+        } else if (error.status === 400 || error.status === 401) {
+          this.loginError.set('Supabase rechazó el inicio de sesión. Verifica el correo, la contraseña y la confirmación del correo.');
+        } else {
+          this.loginError.set(message || 'No se pudo conectar con Supabase. Revisa la configuración e inténtalo de nuevo.');
+        }
       }
     });
   }
@@ -157,7 +165,7 @@ export class AuthPage {
     }
     this.auth.registerAccount(payload).subscribe({
       next: (result) => this.registrationMessage.set(result.status === 'pending'
-        ? 'Registro guardado. Podras iniciar sesion cuando administracion verifique la institucion.'
+        ? 'Registro guardado. Confirma tu correo y, cuando administración verifique la institución, podrás iniciar sesión.'
         : 'Registro guardado. Revisa tu correo y luego inicia sesion.'),
       error: (error: Error) => this.registrationError.set(error.message || 'No se pudo guardar el registro en Supabase.'),
     });
