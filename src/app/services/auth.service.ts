@@ -96,7 +96,7 @@ const roles: AppRole[] = ['admin', 'donor', 'beneficiary', 'volunteer'];
 export class AuthService {
   private readonly supabase: SupabaseClient = createClient(environment.supabaseUrl, environment.supabasePublishableKey);
   private readonly sessionState = signal<AuthSession | null>(null);
-  private readonly readyPromise: Promise<void>;
+  private restoringSession: Promise<void> | null = null;
   private readonly applicationsState = signal<readonly OrganizationApplication[]>([]);
   private readonly currentAvatarState = signal<string | null>(null);
   readonly currentAvatarUrl = this.currentAvatarState.asReadonly();
@@ -107,14 +107,21 @@ export class AuthService {
   readonly isAuthenticated = computed(() => this.sessionState() !== null);
 
   constructor() {
-    this.supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session?.user) { this.sessionState.set(null); return; }
+    this.supabase.auth.onAuthStateChange((event, session) => {
+      // The initial state is restored below from getSession(); don't let an
+      // early INITIAL_SESSION event overwrite that restoration.
+      if (event === 'INITIAL_SESSION') return;
+      if (!session?.user) {
+        this.sessionState.set(null);
+        this.currentAvatarState.set(null);
+        return;
+      }
       queueMicrotask(() => void this.loadSession(session.user.id, session.user.email ?? ''));
     });
-    this.readyPromise = this.restoreSession();
+    void this.restoreSession().catch((error) => console.warn('No se pudo restaurar la sesión de FoodShare.', error));
   }
 
-  ready(): Promise<void> { return this.readyPromise; }
+  ready(): Promise<void> { return this.restoreSession(); }
 
   signIn(email: string, role: AppRole): void { this.sessionState.set({ email: email.trim().toLowerCase(), role }); }
 
@@ -594,9 +601,26 @@ export class AuthService {
     if (error) throw error;
   }
 
-  private async restoreSession(): Promise<void> {
-    const { data } = await this.supabase.auth.getSession();
-    if (data.session) await this.loadSession(data.session.user.id, data.session.user.email ?? '');
+  private restoreSession(): Promise<void> {
+    if (this.restoringSession) return this.restoringSession;
+
+    const restoration = (async () => {
+      const { data, error } = await this.supabase.auth.getSession();
+      if (error) throw error;
+      if (!data.session) {
+        this.sessionState.set(null);
+        this.currentAvatarState.set(null);
+        return;
+      }
+      await this.loadSession(data.session.user.id, data.session.user.email ?? '');
+    })();
+
+    this.restoringSession = restoration;
+    const clearRestoration = (): void => {
+      if (this.restoringSession === restoration) this.restoringSession = null;
+    };
+    void restoration.then(clearRestoration, clearRestoration);
+    return restoration;
   }
 
   private async loadSession(userId: string, email: string): Promise<void> {
