@@ -103,9 +103,11 @@ export class AuthPage {
         this.auth.signIn(result.email, result.role);
         void this.router.navigateByUrl('/app/profile');
       },
-      error: (error: { status?: number; message?: string }) => {
-        this.loginError.set(error.status === 400 || error.status === 401
-          ? 'Correo o contrasena incorrectos, o el perfil esta pendiente de aprobacion.'
+      error: (error: { code?: string; message?: string }) => {
+        const invalidCredentials = error.code === 'invalid_credentials'
+          || /invalid login credentials/i.test(error.message || '');
+        this.loginError.set(invalidCredentials
+          ? 'Correo o contrasena incorrectos.'
           : error.message || 'No se pudo conectar con Supabase. Revisa la configuracion e intentalo de nuevo.');
       }
     });

@@ -593,11 +593,15 @@ export class AuthService {
   }
 
   private async getActiveRole(userId: string): Promise<AppRole | null> {
-    let { data } = await this.supabase.from('profiles').select('id, role, status').eq('id', userId).maybeSingle();
+    const { data: existingProfile, error: profileError } = await this.supabase
+      .from('profiles').select('id, role, status').eq('id', userId).maybeSingle();
+    if (profileError) throw new Error(`No se pudo consultar el perfil: ${profileError.message}`);
+    let data = existingProfile;
 
     // Si no existe la fila en profiles, auto-crearla usando la metadata de auth
     if (!data) {
-      const { data: userData } = await this.supabase.auth.getUser();
+      const { data: userData, error: userError } = await this.supabase.auth.getUser();
+      if (userError) throw new Error(`No se pudo consultar la cuenta: ${userError.message}`);
       const user = userData?.user;
       if (user && user.id === userId) {
         const meta = user.user_metadata || {};
@@ -607,7 +611,7 @@ export class AuthService {
         const phone = meta['phone'] || '';
         const initialStatus = (assignedRole === 'donor' || assignedRole === 'beneficiary') ? 'pending' : 'active';
 
-        const { data: created } = await this.supabase.from('profiles').upsert({
+        const { data: created, error: createError } = await this.supabase.from('profiles').upsert({
           id: userId,
           email: user.email?.toLowerCase(),
           full_name: fullName,
@@ -615,17 +619,19 @@ export class AuthService {
           role: assignedRole,
           status: initialStatus,
         }).select('id, role, status').maybeSingle();
+        if (createError) throw new Error(`No se pudo crear el perfil: ${createError.message}`);
 
         if (created) data = created;
 
         if (assignedRole === 'volunteer') {
-          await this.supabase.from('volunteer_profiles').upsert({
+          const { error: volunteerError } = await this.supabase.from('volunteer_profiles').upsert({
             user_id: userId,
             transport_type: meta['transport_type'] || null,
             other_transport_type: meta['other_transport_type'] || null,
             availability_zone: meta['availability_zone'] || '',
             status: 'available',
-          }).catch(() => {});
+          });
+          if (volunteerError) throw new Error(`No se pudo crear el perfil de voluntariado: ${volunteerError.message}`);
         }
       }
     }
@@ -634,7 +640,8 @@ export class AuthService {
 
     // Los voluntarios no requieren verificación institucional; si quedaron en 'pending', activarlos
     if (data.role === 'volunteer' && data.status === 'pending') {
-      await this.supabase.from('profiles').update({ status: 'active' }).eq('id', userId).catch(() => {});
+      // The authenticated client is only granted profile name/phone updates. Treat
+      // legacy pending volunteers as active here; the migration persists the fix.
       data.status = 'active';
     }
 
