@@ -1,26 +1,254 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { IonContent } from '@ionic/angular';
 import { Router, RouterLink } from '@angular/router';
-import { AuthService } from '../../services/auth.service';
+import { AuthService, DonorDashboardSnapshot, DonorHistorySnapshot, DonorManagementDonation, DonorRequestInboxItem } from '../../services/auth.service';
 
 type DonorSection = 'dashboard' | 'donations' | 'requests' | 'history' | 'create';
+type DonationStatusFilter = 'all' | 'available' | 'reserved' | 'finalized';
+type RequestStatusFilter = 'pending' | 'accepted' | 'finalized';
 
 @Component({
   selector: 'app-donor',
   templateUrl: './donor.page.html',
   styleUrls: ['./donor.page.scss'],
-  imports: [IonContent, RouterLink],
+  imports: [IonContent, RouterLink, DecimalPipe],
 })
 export class DonorPage {
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   readonly session = this.auth.session;
+  readonly dashboard = signal<DonorDashboardSnapshot | null>(null);
+  readonly dashboardLoading = signal(false);
+  readonly dashboardError = signal('');
+  readonly donations = signal<DonorManagementDonation[]>([]);
+  readonly donationsLoading = signal(false);
+  readonly donationsError = signal('');
+  readonly donationSearch = signal('');
+  readonly donationStatusFilter = signal<DonationStatusFilter>('all');
+  readonly requests = signal<DonorRequestInboxItem[]>([]);
+  readonly requestsLoading = signal(false);
+  readonly requestsLoaded = signal(false);
+  readonly requestsError = signal('');
+  readonly requestActionError = signal('');
+  readonly requestActionMessage = signal('');
+  readonly reviewingRequestId = signal<string | null>(null);
+  readonly requestStatusFilter = signal<RequestStatusFilter>('pending');
+  readonly expandedRequestProfile = signal<string | null>(null);
+  readonly history = signal<DonorHistorySnapshot | null>(null);
+  readonly historyLoading = signal(false);
+  readonly historyError = signal('');
+  readonly pendingRequestCount = computed(() => this.requestsLoaded()
+    ? this.requests().filter((request) => request.status === 'pending').length
+    : this.dashboard()?.newRequests ?? 0);
+  readonly visibleRequests = computed(() => this.requests().filter((request) => {
+    const filter = this.requestStatusFilter();
+    if (filter === 'pending') return request.status === 'pending';
+    if (filter === 'accepted') return request.status === 'accepted' && !['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+    return request.status === 'rejected' || request.status === 'cancelled'
+      || ['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+  }));
+  readonly filteredDonations = computed(() => {
+    const search = this.donationSearch().trim().toLocaleLowerCase();
+    const status = this.donationStatusFilter();
+    return this.donations().filter((donation) => {
+      const matchesStatus = status === 'all'
+        || (status === 'available' && donation.status === 'available')
+        || (status === 'reserved' && ['requested', 'reserved', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status))
+        || (status === 'finalized' && ['delivered', 'completed', 'expired', 'cancelled'].includes(donation.status));
+      const matchesSearch = !search || `${donation.foodName} ${donation.categoryName} ${donation.status} ${donation.beneficiaryName ?? ''}`.toLocaleLowerCase().includes(search);
+      return matchesStatus && matchesSearch;
+    });
+  });
   readonly section = signal<DonorSection>('dashboard');
   readonly menuOpen = signal(false);
+
+  constructor() { this.loadDashboard(); }
 
   select(section: DonorSection): void {
     this.section.set(section);
     this.menuOpen.set(false);
+    if (section === 'dashboard') this.loadDashboard();
+    if (section === 'donations') this.loadDonations();
+    if (section === 'requests') this.loadRequests();
+    if (section === 'history') this.loadHistory();
+  }
+
+  loadDashboard(): void {
+    this.dashboardLoading.set(true);
+    this.dashboardError.set('');
+    this.auth.loadDonorDashboard().subscribe({
+      next: (snapshot) => { this.dashboard.set(snapshot); this.dashboardLoading.set(false); },
+      error: (error: Error) => { this.dashboardError.set(error.message || 'No se pudo cargar el inicio de tu organización.'); this.dashboardLoading.set(false); },
+    });
+  }
+
+  loadDonations(): void {
+    this.donationsLoading.set(true);
+    this.donationsError.set('');
+    this.auth.loadDonorDonations().subscribe({
+      next: (snapshot) => { this.donations.set(snapshot.donations); this.donationsLoading.set(false); },
+      error: (error: Error) => { this.donationsError.set(error.message || 'No se pudieron cargar las donaciones.'); this.donationsLoading.set(false); },
+    });
+  }
+
+  loadRequests(): void {
+    this.requestsLoading.set(true);
+    this.requestsError.set('');
+    this.requestActionError.set('');
+    this.auth.loadDonorRequests().subscribe({
+      next: (items) => { this.requests.set(items); this.requestsLoaded.set(true); this.requestsLoading.set(false); },
+      error: (error: Error) => { this.requestsError.set(error.message || 'No se pudieron cargar las solicitudes.'); this.requestsLoaded.set(false); this.requestsLoading.set(false); },
+    });
+  }
+
+  loadHistory(): void {
+    this.historyLoading.set(true);
+    this.historyError.set('');
+    this.auth.loadDonorHistory().subscribe({
+      next: (snapshot) => { this.history.set(snapshot); this.historyLoading.set(false); },
+      error: (error: Error) => { this.historyError.set(error.message || 'No se pudo cargar el historial.'); this.historyLoading.set(false); },
+    });
+  }
+
+  historyDate(value: string): string {
+    return new Intl.DateTimeFormat('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
+  }
+
+  historyStatusLabel(status: string): string {
+    return status === 'completed' ? 'Completada' : 'Entregada';
+  }
+
+  setRequestFilter(filter: RequestStatusFilter): void { this.requestStatusFilter.set(filter); }
+  requestCount(filter: RequestStatusFilter): number {
+    return this.requests().filter((request) => {
+      if (filter === 'pending') return request.status === 'pending';
+      if (filter === 'accepted') return request.status === 'accepted' && !['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+      return request.status === 'rejected' || request.status === 'cancelled'
+        || ['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+    }).length;
+  }
+
+  toggleRequestProfile(requestId: string): void {
+    this.expandedRequestProfile.update((current) => current === requestId ? null : requestId);
+  }
+
+  canAcceptRequest(request: DonorRequestInboxItem): boolean {
+    return request.status === 'pending' && request.donationStatus === 'available' && Date.parse(request.expiresAt) > Date.now();
+  }
+
+  reviewRequest(request: DonorRequestInboxItem, decision: 'accepted' | 'rejected'): void {
+    if (this.reviewingRequestId() || request.status !== 'pending') return;
+    this.reviewingRequestId.set(request.id);
+    this.requestActionError.set('');
+    this.requestActionMessage.set('');
+    this.auth.reviewDonorRequest(request.id, decision).subscribe({
+      next: () => {
+        this.requestActionMessage.set(decision === 'accepted'
+          ? 'Solicitud aceptada. La donación quedó reservada y se cerraron las demás solicitudes pendientes de ese alimento.'
+          : 'Solicitud rechazada.');
+        this.reviewingRequestId.set(null);
+        this.loadRequests();
+      },
+      error: (error: Error) => {
+        this.requestActionError.set(error.message || 'No se pudo actualizar la solicitud.');
+        this.reviewingRequestId.set(null);
+      },
+    });
+  }
+
+  requestQuantity(request: DonorRequestInboxItem): string {
+    return request.quantityRequested === null
+      ? 'Solicita esta donación'
+      : `Solicita ${request.quantityRequested} ${request.donationUnit}`;
+  }
+
+  requestStatusLabel(status: string): string {
+    return (({ pending: 'Pendiente', accepted: 'Aceptada', rejected: 'Rechazada', cancelled: 'Cancelada' }) as Record<string, string>)[status] ?? status;
+  }
+
+  requestOutcomeLabel(request: DonorRequestInboxItem): string {
+    if (request.deliveryStatus === 'delivered' || request.deliveryStatus === 'completed') return 'Entrega completada';
+    if (request.deliveryStatus === 'cancelled') return 'Entrega cancelada';
+    return this.requestStatusLabel(request.status);
+  }
+
+  setDonationSearch(event: Event): void { this.donationSearch.set((event.target as HTMLInputElement).value); }
+  setDonationFilter(filter: DonationStatusFilter): void { this.donationStatusFilter.set(filter); }
+  donationCount(filter: DonationStatusFilter): number {
+    if (filter === 'all') return this.donations().length;
+    if (filter === 'available') return this.donations().filter((donation) => donation.status === 'available').length;
+    if (filter === 'reserved') return this.donations().filter((donation) => ['requested', 'reserved', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status)).length;
+    return this.donations().filter((donation) => ['delivered', 'completed', 'expired', 'cancelled'].includes(donation.status)).length;
+  }
+
+  donationTone(category: string): string {
+    const value = category.toLocaleLowerCase();
+    if (value.includes('frut')) return 'fruit';
+    if (value.includes('prepar') || value.includes('verd')) return 'salad';
+    return 'bread';
+  }
+
+  donationIcon(category: string): string {
+    return ({ bread: '▣', salad: '♧', fruit: '●' })[this.donationTone(category) as 'bread' | 'salad' | 'fruit'];
+  }
+
+  donationDetail(donation: DonorManagementDonation): string {
+    const amount = `${donation.quantity} ${donation.unit}`;
+    if (['delivered', 'completed'].includes(donation.status)) {
+      const date = donation.deliveredAt ? new Intl.DateTimeFormat('es-DO', { day: 'numeric', month: 'short' }).format(new Date(donation.deliveredAt)) : '';
+      return `${amount} · Entregada${date ? ` el ${date}` : ''}`;
+    }
+    if (donation.status === 'reserved' || ['requested', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status)) {
+      return `${amount} · ${this.pickupTime(donation.pickupStartsAt, donation.pickupEndsAt)}`;
+    }
+    if (donation.status === 'cancelled') return `${amount} · Cancelada`;
+    return `${amount} · ${this.donationTiming(donation.expiresAt)}`;
+  }
+
+  donationFooter(donation: DonorManagementDonation): string {
+    if (donation.beneficiaryName && ['reserved', 'pickup_in_progress', 'in_pickup', 'picked_up', 'in_delivery', 'delivered', 'completed'].includes(donation.status)) {
+      return `⌂ ${donation.beneficiaryName}`;
+    }
+    if (donation.deliveredAt) return '✓ Confirmada';
+    if (donation.requestCount > 0) return `◫ ${donation.requestCount} ${donation.requestCount === 1 ? 'solicitud' : 'solicitudes'}`;
+    return 'Sin solicitudes';
+  }
+
+  initials(value: string): string {
+    return value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase() || 'OR';
+  }
+
+  donationTiming(expiresAt: string): string {
+    const expiry = new Date(expiresAt);
+    const time = new Intl.DateTimeFormat('es-DO', { hour: 'numeric', minute: '2-digit' }).format(expiry);
+    const today = new Date();
+    const isToday = expiry.toDateString() === today.toDateString();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const isTomorrow = expiry.toDateString() === tomorrow.toDateString();
+    const day = isToday ? 'hoy' : isTomorrow ? 'mañana' : new Intl.DateTimeFormat('es-DO', { day: 'numeric', month: 'short' }).format(expiry);
+    return `vence ${day}, ${time}`;
+  }
+
+  pickupTime(startsAt: string, endsAt: string): string {
+    const format = (value: string) => new Intl.DateTimeFormat('es-DO', { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+    return `recogida ${format(startsAt)} – ${format(endsAt)}`;
+  }
+
+  recentAge(value: string): string {
+    const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
+    if (minutes < 1) return 'Ahora';
+    if (minutes < 60) return `Hace ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `Hace ${hours} h`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `Hace ${days} d`;
+    return new Intl.DateTimeFormat('es-DO', { day: 'numeric', month: 'short' }).format(new Date(value));
+  }
+
+  statusLabel(status: string): string {
+    return (({ available: 'Disponible', requested: 'Solicitada', reserved: 'Reservada', pickup_in_progress: 'En recogida', in_pickup: 'En recogida', picked_up: 'Recogida', in_delivery: 'En entrega', delivered: 'Entregada', completed: 'Entregada', expired: 'Vencida', cancelled: 'Cancelada' }) as Record<string, string>)[status] ?? status;
   }
 
   toggleMenu(): void {

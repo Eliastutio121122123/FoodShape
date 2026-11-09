@@ -37,6 +37,14 @@
 .workspace > header > button.avatar { border: 0; cursor: pointer; }
 .admin-shell .profile > div, .donor-shell .profile > div, .volunteer-shell .profile > div { min-width: 0; }
 .admin-shell .profile strong, .donor-shell .profile strong, .volunteer-shell .profile strong, .beneficiary-sidebar .sidebar-profile strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donor-shell .dashboard-state { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0; padding: 12px 14px; border: 1px solid #e3eae0; border-radius: 9px; background: #fff; color: #718076; font-size: 10px; }
+.donor-shell .dashboard-error { border-color: #f0d6cf; background: #fff8f6; color: #9e5144; }
+.donor-shell .dashboard-state button { padding: 7px 10px; border: 1px solid #e3eae0; border-radius: 6px; background: #fff; color: #28734a; font: inherit; font-weight: 700; }
+.donor-shell .request-profile-detail { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-top: 11px; padding: 10px; border-radius: 8px; background: #f7f9f5; color: #718076; font-size: 9px; }
+.donor-shell .request-profile-detail strong { width: 100%; color: #34523e; }
+.donor-shell .request-action-hint { color: #9b711b; font-size: 8px; line-height: 1.4; }
+.donor-shell .request-result { padding: 6px 8px; border-radius: 10px; background: #e6f3e2; color: #28774a; font-size: 8px; font-style: normal; text-align: center; }
+.donor-shell .request-actions button:disabled { cursor: not-allowed; opacity: .55; }
 /* @import "@ionic/angular/css/palettes/dark.class.css"; */
 /* FoodShare utiliza su propia paleta clara y no adopta el modo oscuro del sistema. */
 

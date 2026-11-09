@@ -54,6 +54,94 @@ export interface VolunteerDashboardSnapshot {
   completedThisMonth: number;
   totalCompleted: number;
 }
+export interface DonorDashboardDonation {
+  id: string;
+  foodName: string;
+  quantity: number;
+  unit: string;
+  status: string;
+  expiresAt: string;
+  pickupStartsAt: string;
+  pickupEndsAt: string;
+  createdAt: string;
+  requestCount: number;
+}
+export interface DonorDashboardActivity {
+  id: string;
+  kind: 'request' | 'accepted' | 'delivered';
+  organizationName: string;
+  foodName: string;
+  createdAt: string;
+}
+export interface DonorDashboardSnapshot {
+  organizationName: string;
+  activeDonations: number;
+  availableDonations: number;
+  newRequests: number;
+  completedDeliveries: number;
+  donatedKilograms: number;
+  estimatedPortions: number;
+  supportedOrganizations: number;
+  recentDonations: DonorDashboardDonation[];
+  recentActivity: DonorDashboardActivity[];
+}
+export interface DonorManagementDonation {
+  id: string;
+  foodName: string;
+  categoryName: string;
+  quantity: number;
+  unit: string;
+  status: string;
+  expiresAt: string;
+  pickupStartsAt: string;
+  pickupEndsAt: string;
+  createdAt: string;
+  requestCount: number;
+  beneficiaryName: string | null;
+  deliveredAt: string | null;
+}
+export interface DonorDonationsSnapshot {
+  organizationName: string;
+  donations: DonorManagementDonation[];
+}
+export interface DonorRequestInboxItem {
+  id: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  requestedAt: string;
+  quantityRequested: number | null;
+  message: string | null;
+  donationId: string;
+  donationName: string;
+  donationQuantity: number;
+  donationUnit: string;
+  donationStatus: string;
+  pickupStartsAt: string;
+  pickupEndsAt: string;
+  expiresAt: string;
+  deliveryStatus: string | null;
+  deliveredAt: string | null;
+  beneficiaryId: string;
+  beneficiaryName: string;
+  beneficiaryType: string | null;
+  beneficiaryCity: string;
+  beneficiaryPhone: string;
+  beneficiaryVerified: boolean;
+}
+export interface DonorHistoryEntry {
+  id: string;
+  donationName: string;
+  quantity: number;
+  unit: string;
+  beneficiaryName: string;
+  deliveredAt: string;
+  status: string;
+}
+export interface DonorHistorySnapshot {
+  donatedKilogramsThisMonth: number;
+  completedDeliveriesThisMonth: number;
+  supportedOrganizationsThisMonth: number;
+  deliveries: DonorHistoryEntry[];
+}
 export interface AdminReportSnapshot {
   donationCount: number; estimatedKilograms: number; participatingDonors: number; completedDeliveries: number;
   categoryBreakdown: { name: string; donationCount: number; estimatedKilograms: number; percent: number }[];
@@ -492,6 +580,351 @@ export class AuthService {
   setPendingOrganizations(applications: readonly OrganizationApplication[]): void { this.applicationsState.set(applications); }
   removePendingOrganization(id: string): void { this.applicationsState.update((items) => items.filter((item) => item.id !== id)); }
 
+
+  loadDonorDashboard(): Observable<DonorDashboardSnapshot> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar el panel de tu organización.');
+
+      const { data: organization, error: organizationError } = await this.supabase.from('organizations')
+        .select('id, name').eq('owner_id', user.id).eq('organization_type', 'donor').maybeSingle();
+      if (organizationError) throw organizationError;
+      if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
+
+      const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
+        .select('id, food_name, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at, created_at')
+        .eq('donor_organization_id', organization.id).order('created_at', { ascending: false });
+      if (donationsError) throw donationsError;
+      const donations = donationRows ?? [];
+      const donationIds = donations.map((donation) => donation.id);
+
+      const { data: requestRows, error: requestsError } = donationIds.length
+        ? await this.supabase.from('donation_requests')
+          .select('id, donation_id, beneficiary_organization_id, status, requested_at, updated_at')
+          .in('donation_id', donationIds).order('requested_at', { ascending: false })
+        : { data: [], error: null };
+      if (requestsError) throw requestsError;
+      const requests = requestRows ?? [];
+      const requestIds = requests.map((request) => request.id);
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+      const { data: deliveryRows, error: deliveriesError } = requestIds.length
+        ? await this.supabase.from('deliveries').select('id, request_id, delivered_at')
+          .in('request_id', requestIds).eq('status', 'delivered')
+          .gte('delivered_at', monthStart).lt('delivered_at', nextMonthStart)
+        : { data: [], error: null };
+      if (deliveriesError) throw deliveriesError;
+      const deliveries = deliveryRows ?? [];
+
+      const beneficiaryIds = [...new Set(requests.map((request) => request.beneficiary_organization_id))];
+      const { data: beneficiaryRows, error: beneficiariesError } = beneficiaryIds.length
+        ? await this.supabase.from('organizations').select('id, name').in('id', beneficiaryIds)
+        : { data: [], error: null };
+      if (beneficiariesError) throw beneficiariesError;
+      const beneficiaryNames = new Map((beneficiaryRows ?? []).map((row) => [row.id, row.name]));
+      const donationsById = new Map(donations.map((donation) => [donation.id, donation]));
+      const requestsById = new Map(requests.map((request) => [request.id, request]));
+      const requestsByDonation = new Map<string, typeof requests>();
+      for (const request of requests) {
+        const grouped = requestsByDonation.get(request.donation_id) ?? [];
+        grouped.push(request);
+        requestsByDonation.set(request.donation_id, grouped);
+      }
+      const toKilograms = (quantity: number, unit: string): number => {
+        const normalized = unit.trim().toLocaleLowerCase();
+        if (['kg', 'kilo', 'kilos', 'kilogramo', 'kilogramos'].includes(normalized)) return quantity;
+        if (['g', 'gramo', 'gramos'].includes(normalized)) return quantity / 1000;
+        if (['lb', 'lbs', 'libra', 'libras'].includes(normalized)) return quantity * 0.45359237;
+        return 0;
+      };
+
+      const recentDonations = donations.slice(0, 3).map((donation) => ({
+        id: donation.id, foodName: donation.food_name, quantity: Number(donation.quantity), unit: donation.unit,
+        status: donation.status, expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
+        pickupEndsAt: donation.pickup_ends_at, createdAt: donation.created_at,
+        requestCount: (requestsByDonation.get(donation.id) ?? []).length,
+      }));
+      const recentActivity: DonorDashboardActivity[] = [];
+      for (const request of requests) {
+        if (request.status !== 'pending' && request.status !== 'accepted') continue;
+        const donation = donationsById.get(request.donation_id);
+        if (!donation) continue;
+        recentActivity.push({
+          id: request.id, kind: request.status === 'pending' ? 'request' : 'accepted',
+          organizationName: beneficiaryNames.get(request.beneficiary_organization_id) ?? 'Organización beneficiaria',
+          foodName: donation.food_name,
+          createdAt: request.status === 'pending' ? request.requested_at : request.updated_at,
+        });
+      }
+      for (const delivery of deliveries) {
+        const request = requestsById.get(delivery.request_id);
+        const donation = request ? donationsById.get(request.donation_id) : undefined;
+        if (!request || !donation || !delivery.delivered_at) continue;
+        recentActivity.push({
+          id: delivery.id, kind: 'delivered',
+          organizationName: beneficiaryNames.get(request.beneficiary_organization_id) ?? 'Organización beneficiaria',
+          foodName: donation.food_name, createdAt: delivery.delivered_at,
+        });
+      }
+      recentActivity.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+      const kilograms = deliveries.reduce((total, delivery) => {
+        const request = requestsById.get(delivery.request_id);
+        const donation = request ? donationsById.get(request.donation_id) : undefined;
+        return total + (donation ? toKilograms(Number(donation.quantity), donation.unit) : 0);
+      }, 0);
+      const completedRequestIds = new Set(deliveries.map((delivery) => delivery.request_id));
+      const supportedOrganizations = new Set(requests
+        .filter((request) => completedRequestIds.has(request.id))
+        .map((request) => request.beneficiary_organization_id)).size;
+      const activeStatuses = ['available', 'reserved', 'pickup_in_progress', 'picked_up'];
+      const isCurrentlyActive = (donation: typeof donations[number]) =>
+        activeStatuses.includes(donation.status) && Date.parse(donation.expires_at) > now.getTime();
+
+      return {
+        organizationName: organization.name,
+        activeDonations: donations.filter(isCurrentlyActive).length,
+        availableDonations: donations.filter((donation) => donation.status === 'available' && Date.parse(donation.expires_at) > now.getTime()).length,
+        newRequests: requests.filter((request) => request.status === 'pending').length,
+        completedDeliveries: deliveries.length,
+        donatedKilograms: kilograms,
+        estimatedPortions: Math.round(kilograms * 2),
+        supportedOrganizations,
+        recentDonations,
+        recentActivity: recentActivity.slice(0, 3),
+      };
+    })());
+  }
+
+  loadDonorDonations(): Observable<DonorDonationsSnapshot> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar las donaciones de tu organización.');
+      const { data: organization, error: organizationError } = await this.supabase.from('organizations')
+        .select('id, name').eq('owner_id', user.id).eq('organization_type', 'donor').maybeSingle();
+      if (organizationError) throw organizationError;
+      if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
+
+      const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
+        .select('id, food_name, category_id, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at, created_at, food_categories(name)')
+        .eq('donor_organization_id', organization.id).order('created_at', { ascending: false });
+      if (donationsError) throw donationsError;
+      const donations = (donationRows ?? []) as unknown as {
+        id: string; food_name: string; category_id: string | null; quantity: number; unit: string; status: string;
+        expires_at: string; pickup_starts_at: string; pickup_ends_at: string; created_at: string;
+        food_categories: { name: string } | { name: string }[] | null;
+      }[];
+      const donationIds = donations.map((donation) => donation.id);
+      const { data: requestRows, error: requestsError } = donationIds.length
+        ? await this.supabase.from('donation_requests')
+          .select('id, donation_id, beneficiary_organization_id, status')
+          .in('donation_id', donationIds)
+        : { data: [], error: null };
+      if (requestsError) throw requestsError;
+      const requests = requestRows ?? [];
+      const requestIds = requests.map((request) => request.id);
+      const beneficiaryIds = [...new Set(requests.map((request) => request.beneficiary_organization_id))];
+      const [{ data: beneficiaryRows, error: beneficiariesError }, { data: deliveryRows, error: deliveriesError }] = await Promise.all([
+        beneficiaryIds.length
+          ? this.supabase.from('organizations').select('id, name').in('id', beneficiaryIds)
+          : Promise.resolve({ data: [], error: null }),
+        requestIds.length
+          ? this.supabase.from('deliveries').select('request_id, delivered_at').in('request_id', requestIds).eq('status', 'delivered')
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (beneficiariesError) throw beneficiariesError;
+      if (deliveriesError) throw deliveriesError;
+
+      const beneficiaryNames = new Map((beneficiaryRows ?? []).map((row) => [row.id, row.name]));
+      const requestsByDonation = new Map<string, typeof requests>();
+      for (const request of requests) {
+        const related = requestsByDonation.get(request.donation_id) ?? [];
+        related.push(request);
+        requestsByDonation.set(request.donation_id, related);
+      }
+      const deliveriesByRequest = new Map((deliveryRows ?? []).map((delivery) => [delivery.request_id, delivery.delivered_at]));
+
+      return {
+        organizationName: organization.name,
+        donations: donations.map((donation) => {
+          const relatedRequests = requestsByDonation.get(donation.id) ?? [];
+          const acceptedRequest = relatedRequests.find((request) => request.status === 'accepted');
+          const beneficiaryRequest = acceptedRequest ?? relatedRequests[0];
+          const deliveredAt = relatedRequests.map((request) => deliveriesByRequest.get(request.id) ?? null)
+            .filter((value): value is string => value !== null)
+            .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+          const category = Array.isArray(donation.food_categories) ? donation.food_categories[0] : donation.food_categories;
+          return {
+            id: donation.id, foodName: donation.food_name, categoryName: category?.name ?? 'Otros',
+            quantity: Number(donation.quantity), unit: donation.unit, status: donation.status,
+            expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
+            pickupEndsAt: donation.pickup_ends_at, createdAt: donation.created_at,
+            requestCount: relatedRequests.length,
+            beneficiaryName: beneficiaryRequest ? beneficiaryNames.get(beneficiaryRequest.beneficiary_organization_id) ?? null : null,
+            deliveredAt,
+          };
+        }),
+      };
+    })());
+  }
+
+  loadDonorRequests(): Observable<DonorRequestInboxItem[]> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar las solicitudes de tu organización.');
+      const { data: organization, error: organizationError } = await this.supabase.from('organizations')
+        .select('id').eq('owner_id', user.id).eq('organization_type', 'donor').maybeSingle();
+      if (organizationError) throw organizationError;
+      if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
+
+      const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
+        .select('id, food_name, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at')
+        .eq('donor_organization_id', organization.id);
+      if (donationsError) throw donationsError;
+      const donations = (donationRows ?? []) as {
+        id: string; food_name: string; quantity: number; unit: string; status: string;
+        expires_at: string; pickup_starts_at: string; pickup_ends_at: string;
+      }[];
+      const donationIds = donations.map((donation) => donation.id);
+      if (!donationIds.length) return [];
+
+      const { data: requestRows, error: requestsError } = await this.supabase.from('donation_requests')
+        .select('id, donation_id, beneficiary_organization_id, status, quantity_requested, message, requested_at')
+        .in('donation_id', donationIds).order('requested_at', { ascending: false });
+      if (requestsError) throw requestsError;
+      const requests = (requestRows ?? []) as {
+        id: string; donation_id: string; beneficiary_organization_id: string; status: string;
+        quantity_requested: number | null; message: string | null; requested_at: string;
+      }[];
+      if (!requests.length) return [];
+
+      const beneficiaryIds = [...new Set(requests.map((request) => request.beneficiary_organization_id))];
+      const requestIds = requests.map((request) => request.id);
+      const [beneficiariesResult, deliveriesResult] = await Promise.all([
+        this.supabase.from('organizations').select('id, name, profile_type, city, phone, verification_status').in('id', beneficiaryIds),
+        this.supabase.from('deliveries').select('request_id, status, delivered_at').in('request_id', requestIds),
+      ]);
+      if (beneficiariesResult.error) throw beneficiariesResult.error;
+      if (deliveriesResult.error) throw deliveriesResult.error;
+
+      const beneficiaryById = new Map((beneficiariesResult.data ?? []).map((beneficiary) => [beneficiary.id, beneficiary]));
+      const donationById = new Map(donations.map((donation) => [donation.id, donation]));
+      const deliveryByRequestId = new Map((deliveriesResult.data ?? []).map((delivery) => [delivery.request_id, delivery]));
+      return requests.flatMap((request) => {
+        const donation = donationById.get(request.donation_id);
+        if (!donation) return [];
+        const beneficiary = beneficiaryById.get(request.beneficiary_organization_id);
+        const delivery = deliveryByRequestId.get(request.id);
+        return [{
+          id: request.id, status: request.status as DonorRequestInboxItem['status'], requestedAt: request.requested_at,
+          quantityRequested: request.quantity_requested === null ? null : Number(request.quantity_requested),
+          message: request.message, donationId: donation.id, donationName: donation.food_name,
+          donationQuantity: Number(donation.quantity), donationUnit: donation.unit, donationStatus: donation.status,
+          pickupStartsAt: donation.pickup_starts_at, pickupEndsAt: donation.pickup_ends_at, expiresAt: donation.expires_at,
+          deliveryStatus: delivery?.status ?? null, deliveredAt: delivery?.delivered_at ?? null,
+          beneficiaryId: request.beneficiary_organization_id,
+          beneficiaryName: beneficiary?.name ?? 'Organización beneficiaria',
+          beneficiaryType: beneficiary?.profile_type ?? null, beneficiaryCity: beneficiary?.city ?? '',
+          beneficiaryPhone: beneficiary?.phone ?? '', beneficiaryVerified: beneficiary?.verification_status === 'approved',
+        }];
+      });
+    })());
+  }
+
+  reviewDonorRequest(requestId: string, decision: 'accepted' | 'rejected'): Observable<void> {
+    return from((async () => {
+      const { error } = await this.supabase.rpc('review_donation_request', {
+        p_request_id: requestId,
+        p_decision: decision,
+      });
+      if (error) throw new Error(error.message || 'No se pudo actualizar la solicitud.');
+    })());
+  }
+
+  loadDonorHistory(): Observable<DonorHistorySnapshot> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar el historial de tu organización.');
+      const { data: organization, error: organizationError } = await this.supabase.from('organizations')
+        .select('id').eq('owner_id', user.id).eq('organization_type', 'donor').maybeSingle();
+      if (organizationError) throw organizationError;
+      if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
+
+      const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
+        .select('id, food_name, quantity, unit')
+        .eq('donor_organization_id', organization.id);
+      if (donationsError) throw donationsError;
+      const donations = donationRows ?? [];
+      const donationIds = donations.map((donation) => donation.id);
+      if (!donationIds.length) {
+        return { donatedKilogramsThisMonth: 0, completedDeliveriesThisMonth: 0, supportedOrganizationsThisMonth: 0, deliveries: [] };
+      }
+
+      const { data: requestRows, error: requestsError } = await this.supabase.from('donation_requests')
+        .select('id, donation_id, beneficiary_organization_id, quantity_requested')
+        .in('donation_id', donationIds);
+      if (requestsError) throw requestsError;
+      const requests = requestRows ?? [];
+      const requestIds = requests.map((request) => request.id);
+      if (!requestIds.length) {
+        return { donatedKilogramsThisMonth: 0, completedDeliveriesThisMonth: 0, supportedOrganizationsThisMonth: 0, deliveries: [] };
+      }
+
+      const [deliveriesResult, beneficiariesResult] = await Promise.all([
+        this.supabase.from('deliveries').select('id, request_id, status, delivered_at, pickup_at, created_at')
+          .in('request_id', requestIds).in('status', ['delivered', 'completed']),
+        this.supabase.from('organizations').select('id, name')
+          .in('id', [...new Set(requests.map((request) => request.beneficiary_organization_id))]),
+      ]);
+      if (deliveriesResult.error) throw deliveriesResult.error;
+      if (beneficiariesResult.error) throw beneficiariesResult.error;
+
+      const requestsById = new Map(requests.map((request) => [request.id, request]));
+      const donationsById = new Map(donations.map((donation) => [donation.id, donation]));
+      const beneficiariesById = new Map((beneficiariesResult.data ?? []).map((beneficiary) => [beneficiary.id, beneficiary.name]));
+      const toKilograms = (quantity: number, unit: string): number => {
+        const normalized = unit.trim().toLocaleLowerCase();
+        if (['kg', 'kilo', 'kilos', 'kilogramo', 'kilogramos'].includes(normalized)) return quantity;
+        if (['g', 'gramo', 'gramos'].includes(normalized)) return quantity / 1000;
+        if (['lb', 'lbs', 'libra', 'libras'].includes(normalized)) return quantity * 0.45359237;
+        return 0;
+      };
+      const completed = (deliveriesResult.data ?? []).flatMap((delivery) => {
+        const request = requestsById.get(delivery.request_id);
+        const donation = request ? donationsById.get(request.donation_id) : undefined;
+        if (!request || !donation) return [];
+        return [{
+          id: delivery.id,
+          donationName: donation.food_name,
+          quantity: request.quantity_requested === null ? Number(donation.quantity) : Number(request.quantity_requested),
+          unit: donation.unit,
+          beneficiaryId: request.beneficiary_organization_id,
+          beneficiaryName: beneficiariesById.get(request.beneficiary_organization_id) ?? 'Organización beneficiaria',
+          deliveredAt: delivery.delivered_at ?? delivery.pickup_at ?? delivery.created_at,
+          status: delivery.status,
+        }];
+      }).sort((a, b) => Date.parse(b.deliveredAt) - Date.parse(a.deliveredAt));
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+      const completedThisMonth = completed.filter((delivery) => {
+        const date = Date.parse(delivery.deliveredAt);
+        return date >= monthStart && date < nextMonthStart;
+      });
+      const deliveredQuantitiesThisMonth = completedThisMonth.reduce(
+        (total, delivery) => total + toKilograms(delivery.quantity, delivery.unit), 0,
+      );
+
+      return {
+        donatedKilogramsThisMonth: deliveredQuantitiesThisMonth,
+        completedDeliveriesThisMonth: completedThisMonth.length,
+        supportedOrganizationsThisMonth: new Set(completedThisMonth.map((delivery) => delivery.beneficiaryId)).size,
+        deliveries: completed.map(({ beneficiaryId: _beneficiaryId, ...delivery }) => delivery),
+      };
+    })());
+  }
 
   loadVolunteerDashboard(): Observable<VolunteerDashboardSnapshot> {
     return from((async () => {
