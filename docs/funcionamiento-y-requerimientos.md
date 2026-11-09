@@ -1,6 +1,6 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 4 de noviembre de 2026.
+**Estado revisado:** 9 de noviembre de 2026.
 
 Este documento conserva el alcance funcional acordado y describe quÃ© partes estÃ¡n implementadas en el cÃ³digo, cuÃ¡les existen solo en la base de datos y cuÃ¡les aÃºn estÃ¡n pendientes. Una tabla o una pantalla por sÃ­ sola no significa que una funcionalidad estÃ© completa: para considerarla conectada, el flujo debe guardar y leer datos persistentes y aplicar los permisos correspondientes.
 
@@ -14,14 +14,14 @@ La aplicaciÃ³n estÃ¡ desarrollada con Ionic y Angular. La autenticaciÃ³n y
 
 ## 2. Estado operativo conocido
 
-- **Compilacion web:** la configuracion de desarrollo compilo correctamente despues de los cambios recientes del panel, catalogos, reportes y autenticacion. La ultima compilacion de produccion documentada excedio los limites de estilos configurados en Angular; conviene volver a revisarla antes de publicar.
+- **Compilacion web:** la configuracion de desarrollo compilo correctamente despues de cambios recientes del panel, catalogos, reportes y autenticacion. La ultima compilacion de produccion documentada excedio los limites de estilos configurados en Angular; conviene volver a revisarla antes de publicar.
 - **Esquema remoto:** se pudo consultar `public.profiles` desde SQL Editor; por tanto, esa tabla existe en el proyecto Supabase. El archivo de migraciÃ³n tambiÃ©n existe en el repositorio.
-- **AutenticaciÃ³n remota:** se observÃ³ una cuenta creada en la secciÃ³n Auth de Supabase. Esto no confirma que tenga perfil administrativo ni que el registro desde la aplicaciÃ³n funcione.
-- **Conectividad Supabase comprobada parcialmente:** el endpoint de Auth y el preflight CORS respondieron HTTP 200 desde el entorno local; la clave publishable configurada fue aceptada por Supabase. Sin embargo, el navegador sigue mostrando que no puede conectar con Auth. Falta identificar en DevTools la solicitud y causa exacta.
-- **Administrador:** se pudo acceder al panel ` /app/admin ` en la sesion actual. Aun falta confirmar en Supabase que el perfil tenga `role = 'admin'` y `status = 'active'` para verificar que el acceso persiste correctamente.
+- **AutenticaciÃ³n remota:** se observaron errores distintos en momentos diferentes: una respuesta HTTP 400 de Auth por correo sin confirmar y, posteriormente, el mensaje de FoodShare que indica que la organizacion sigue pendiente. El segundo mensaje significa que Auth acepto las credenciales, pero el perfil o la organizacion no cumplio la validacion de acceso.
+- **Conectividad Supabase comprobada parcialmente:** el endpoint de Auth y el preflight CORS respondieron HTTP 200 desde el entorno local; la clave publishable configurada fue aceptada por Supabase. Esto no verifica que las migraciones nuevas se hayan aplicado en el proyecto remoto.
+- **Administrador:** se pudo acceder al panel ` /app/admin ` en la sesion actual y la captura muestra la institucion en la pestaña Verificadas. Aun falta comprobar que la migracion de sincronizacion de aprobacion y acceso se haya ejecutado en Supabase y que la fila correspondiente tenga estados consistentes.
 - **ConfiguraciÃ³n:** la interfaz usa `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` desde `.env`; la clave `secret`/`service_role` nunca debe incorporarse al frontend. DespuÃ©s de cambiar `.env`, hay que recrear el servicio web para que regenere la configuraciÃ³n de ejecuciÃ³n.
 
-La respuesta HTTP 200 y el preflight CORS desde el entorno local no confirman que el navegador complete el inicio de sesion o el registro; ese flujo sigue pendiente de diagnostico.
+La conectividad HTTP y CORS se comprobo parcialmente desde el entorno local. El flujo de inicio de sesion sigue pendiente de validacion integral contra el proyecto Supabase remoto, en particular la ejecucion de las migraciones recientes y los estados de la cuenta institucional aprobada.
 
 ## 3. Requerimientos funcionales y estado
 
@@ -35,8 +35,8 @@ Estados usados:
 
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
-| 1 | Registro de usuarios | Parcial | Hay formularios por rol y una llamada a Supabase Auth. El trigger crea el perfil y los datos de organizacion o voluntariado. El endpoint Auth responde HTTP 200 desde el entorno local, pero en la interfaz se observo `Failed to fetch`; falta capturar y confirmar el registro completo en el navegador. |
-| 2 | Inicio de sesion y autenticacion | Parcial | El servicio implementa acceso con correo y contrasena y restauracion de sesion. Tras iniciar sesion, la app abre primero la pantalla Mi perfil; desde alli se puede volver al panel del rol. La conexion fue exitosa en la captura reciente (HTTP 200). |
+| 1 | Registro de usuarios | Parcial | Hay formularios por rol y una llamada a Supabase Auth. El trigger crea el perfil y los datos de organizacion o voluntariado. La conectividad del endpoint se comprobo desde el entorno local, pero falta validar el registro completo con el proyecto remoto y sus migraciones actualizadas. |
+| 2 | Inicio de sesion y autenticacion | Parcial | El servicio implementa acceso con correo y contrasena, OAuth con Google y restauracion de sesion. Para organizaciones se requiere `profiles.status = 'active'`, `organizations.verification_status = 'approved'` y `organizations.status = 'active'`. El codigo y la migracion sincronizan estos estados al aprobar; la ejecucion remota de la migracion aun debe confirmarse. Tras el acceso, la app abre Mi perfil y permite volver al panel del rol. |
 | 3 | Gestion de perfiles y roles | Parcial | Hay una pantalla comun de perfil para los cuatro roles. El usuario puede editar nombre y telefono; correo y rol son de solo lectura. El editor de foto usa Supabase Storage y `profiles.avatar_path`; falta aplicar la migracion `20261104000000_foodshare_profile_avatars_storage.sql` en el proyecto remoto. Los datos institucionales y de voluntariado se muestran, pero aun no se editan desde esta pantalla. |
 | 30 | Permisos segun el rol | Parcial | Hay guards de Angular y politicas RLS en la migracion. Falta integrar las operaciones de negocio restantes y validar los permisos en el proyecto remoto. |
 
@@ -44,8 +44,8 @@ Estados usados:
 
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
-| 4 | Registro y gestion de instituciones donantes | Parcial | El registro crea la organizacion en Supabase. El panel administrativo consulta estados pendiente, verificada y rechazada, permite buscar y aprobar o rechazar pendientes; la migracion `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth de organizaciones aprobadas; falta completar la gestion de datos institucionales y aplicar la migracion remota.
-| 5 | Registro y gestion de instituciones beneficiarias | Parcial | El registro crea la organizacion en Supabase. El panel administrativo consulta estados pendiente, verificada y rechazada, permite buscar y aprobar o rechazar pendientes; la migracion `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth de organizaciones aprobadas; falta completar la gestion de datos institucionales y aplicar la migracion remota.
+| 4 | Registro y gestion de instituciones donantes | Parcial | El registro crea la organizacion en Supabase. El panel permite consultar y revisar solicitudes. La migracion `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth y activa el perfil de organizaciones aprobadas; su aplicacion remota no esta confirmada. Falta completar la gestion de datos institucionales.
+| 5 | Registro y gestion de instituciones beneficiarias | Parcial | El registro crea la organizacion en Supabase. El panel permite consultar y revisar solicitudes. La migracion `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth y activa el perfil de organizaciones aprobadas; su aplicacion remota no esta confirmada. Falta completar la gestion de datos institucionales.
 | 6 | Registro y gestiÃ³n de voluntarios | Parcial | El trigger crea `volunteer_profiles`. La ediciÃ³n persistente del perfil y de disponibilidad aÃºn no estÃ¡ conectada. |
 | 24 | Gestion administrativa de usuarios e instituciones | Parcial | La lista de usuarios y las vistas por estado de las instituciones consultan Supabase. Se puede buscar, aprobar y rechazar instituciones pendientes. La gestion de estados de cuentas y otras areas del panel siguen pendientes.
 
@@ -103,7 +103,7 @@ Estados usados:
 
 ## 4. Funciones conectadas actualmente
 
-1. **Autenticacion y perfiles:** `AuthService` usa Supabase Auth para registro, inicio de sesion por contrasena y OAuth con Google. La creacion del perfil depende del trigger incluido en la migracion. Se identificaron dos causas distintas de bloqueo: metadata `avatar_url` excesiva que generaba HTTP 520 en la API REST, y cuentas con `email_confirmed_at = NULL` que reciben HTTP 400 al autenticarse. La interfaz ahora distingue esos errores.
+1. **Autenticacion y perfiles:** `AuthService` usa Supabase Auth para registro, inicio de sesion por contrasena y OAuth con Google. La creacion del perfil depende del trigger incluido en la migracion. Se identificaron causas distintas: metadata `avatar_url` excesiva que generaba HTTP 520 en la API REST, correos sin confirmar que reciben HTTP 400, y perfiles/organizaciones con estados pendientes que son rechazados despues de autenticar. Para organizaciones, la migracion `20261104120000_confirm_organization_email_on_approval.sql` sincroniza confirmacion de correo y activacion del perfil con la aprobacion administrativa.
 2. **Control de sesiÃ³n y rutas:** se restaura la sesiÃ³n y los guards protegen los paneles segÃºn el rol almacenado en `profiles`.
 3. **Revision de organizaciones:** el panel administrativo consulta instituciones pendientes, verificadas y rechazadas, permite buscar por nombre, correo o representante y actualiza aprobacion/rechazo en Supabase con RLS.
 4. **Perfil personal:** todos los paneles muestran una entrada de perfil con el correo de la sesion. La pagina comun obtiene nombre, correo, telefono, rol y ruta de foto del perfil autenticado; permite cambiar nombre y telefono, subir/cambiar foto en Storage, muestra informacion asociada de organizaciones o voluntariado e incluye cierre de sesion local. Despues de iniciar sesion con correo o Google, se abre primero esta pantalla.
@@ -138,8 +138,8 @@ Las pantallas de donantes, beneficiarios y voluntariado aun muestran ejemplos. S
 
 ## 7. Proximos pasos recomendados
 
-1. **Resolver el error de Auth desde el navegador:** en DevTools > Network capturar la solicitud que falla al registrarse o iniciar sesion, revisar URL, estado y respuesta; no compartir tokens ni claves. El endpoint y CORS ya respondieron desde el entorno local, asi que se necesita identificar la llamada real.
-2. **Confirmar las cuentas y aprobaciones:** comprobar en Supabase que la cuenta administradora tenga `role = 'admin'` y `status = 'active'`, y validar aprobacion de una institucion y acceso posterior.
+1. **Verificar el acceso de organizaciones aprobadas:** aplicar `supabase/migrations/20261104120000_confirm_organization_email_on_approval.sql` al proyecto remoto. Luego consultar `profiles.status`, `organizations.verification_status`, `organizations.status` y `auth.users.email_confirmed_at` para la cuenta afectada. Se espera `active`, `approved`, `active` y una fecha de confirmacion. La ultima captura todavia muestra el aviso de organizacion pendiente, por lo que no se debe considerar validado el login hasta comprobar esos valores y completar una entrada real.
+2. **Confirmar las cuentas y aprobaciones:** comprobar que la cuenta administradora tenga `role = 'admin'` y `status = 'active'`, y que una institucion aprobada pueda iniciar sesion despues de aplicar la migracion.
 3. **Completar el apartado de perfil:** permitir edicion persistente de los datos de organizacion y voluntariado, con validacion y permisos RLS.
 4. **Conectar donaciones a Supabase:** implementar publicacion, consulta, filtros, edicion, cancelacion y transiciones de estado; retirar los datos en memoria de ese flujo.
 5. **Conectar solicitudes y reservas:** implementar solicitud, aceptar, rechazar y cancelar, garantizando que una donacion no quede reservada por mas de una solicitud aceptada.
@@ -158,7 +158,7 @@ Las pantallas de donantes, beneficiarios y voluntariado aun muestran ejemplos. S
 
 - **Voluntariado:** una cuenta revisada en Supabase tenía `profiles.role = 'volunteer'`, `profiles.status = 'active'` y `volunteer_profiles.status = 'available'`. La política `profiles_select` estaba habilitada y permitía leer el perfil propio. En el navegador, Auth respondía HTTP 200, pero la consulta REST de `profiles` respondía HTTP 520.
 - **Metadatos Auth demasiado grandes:** la misma cuenta tenía `raw_user_meta_data` de 50,056 bytes; `avatar_url` ocupaba 49,717 bytes. Después de retirar ese campo, una consulta de auditoría encontró cero cuentas con `avatar_url` mayor de 4 KB. No guardar imágenes codificadas en base64 dentro de `auth.users.raw_user_meta_data`: esos metadatos se incluyen en respuestas y tokens de Auth y pueden causar solicitudes demasiado grandes.
-- **Institución donante:** la cuenta aprobada podía conservar `email_confirmed_at = NULL` y `profiles.status = 'pending'`, dos estados que bloquean el acceso en etapas distintas. La migración `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth y activa el perfil al aprobar organizaciones; también repara ambos estados en las que ya estaban aprobadas. Debe aplicarse en el proyecto remoto para habilitar las cuentas existentes.
+- **Institución donante:** la cuenta aprobada podia conservar `email_confirmed_at = NULL` y/o `profiles.status = 'pending'`, dos condiciones que bloquean el acceso en etapas distintas. La migracion `20261104120000_confirm_organization_email_on_approval.sql` confirma el correo Auth y activa el perfil al aprobar organizaciones; tambien repara ambos estados en las que ya estaban aprobadas. El codigo se subio a GitHub, pero no se verifico la ejecucion de SQL en el proyecto Supabase. La ultima captura todavia muestra el mensaje de organizacion pendiente; comprobar los cuatro estados con una consulta SQL antes de dar el acceso por resuelto.
 - **Mensajes de autenticación:** la pantalla distingue `email_not_confirmed`, `invalid_credentials` y perfiles pendientes. El registro institucional informa que podrá iniciar sesión cuando administración verifique la institución; los voluntarios mantienen la confirmación habitual por correo.
 - **Persistencia de sesión:** los guards restauran la sesión persistida antes de decidir una redirección. El evento inicial de Supabase Auth no debe borrar el estado restaurado. La sesión se elimina al cerrar sesión; usar otro navegador o borrar el almacenamiento local equivale a una sesión nueva.
 - **Configuración en rutas internas:** `runtime-config.js` debe cargarse desde `/assets/runtime-config.js`. Una ruta relativa podía buscar el archivo bajo `/app/assets/` al recargar una URL profunda como `/app/profile`, dejar activo el valor de reserva `your_project_ref` y hacer que el guard confundiera una falla de configuración con una sesión cerrada.
