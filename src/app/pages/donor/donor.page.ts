@@ -2,16 +2,22 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { IonContent } from '@ionic/angular';
 import { Router, RouterLink } from '@angular/router';
+import { Observable } from 'rxjs';
 import { AuthService, DonorDashboardSnapshot, DonorDonationCreateOptions, DonorHistorySnapshot, DonorManagementDonation, DonorRequestInboxItem } from '../../services/auth.service';
 
-type DonorSection = 'dashboard' | 'donations' | 'requests' | 'history' | 'create';
-type DonationStatusFilter = 'all' | 'available' | 'reserved' | 'finalized';
+type DonorSection = 'dashboard' | 'donations' | 'requests' | 'history' | 'create' | 'edit';
+type DonationStatusFilter = 'all' | 'available' | 'hidden' | 'reserved' | 'finalized';
 type RequestStatusFilter = 'pending' | 'accepted' | 'finalized';
 
 function localDateTimeAfter(hours: number): string {
   const date = new Date(Date.now() + hours * 60 * 60 * 1000);
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function localDateTimeValue(value: string): string {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
 @Component({
@@ -28,6 +34,8 @@ export class DonorPage {
   readonly dashboardLoading = signal(false);
   readonly dashboardError = signal('');
   readonly donations = signal<DonorManagementDonation[]>([]);
+  readonly editingDonation = signal<DonorManagementDonation | null>(null);
+  readonly donationActionsId = signal<string | null>(null);
   readonly selectedDonation = signal<DonorManagementDonation | null>(null);
   readonly donationsLoading = signal(false);
   readonly donationsError = signal('');
@@ -60,6 +68,7 @@ export class DonorPage {
   readonly createPickupEndsAt = signal(localDateTimeAfter(4));
   readonly selectedImage = signal<File | null>(null);
   readonly selectedImagePreview = signal<string | null>(null);
+  readonly removeCurrentImage = signal(false);
   readonly pendingRequestCount = computed(() => this.requestsLoaded()
     ? this.requests().filter((request) => request.status === 'pending').length
     : this.dashboard()?.newRequests ?? 0);
@@ -75,10 +84,11 @@ export class DonorPage {
     const status = this.donationStatusFilter();
     return this.donations().filter((donation) => {
       const matchesStatus = status === 'all'
-        || (status === 'available' && donation.status === 'available')
+        || (status === 'available' && donation.status === 'available' && donation.isVisible)
+        || (status === 'hidden' && !donation.isVisible)
         || (status === 'reserved' && ['requested', 'reserved', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status))
         || (status === 'finalized' && ['delivered', 'completed', 'expired', 'cancelled'].includes(donation.status));
-      const matchesSearch = !search || `${donation.foodName} ${donation.categoryName} ${donation.status} ${donation.beneficiaryName ?? ''}`.toLocaleLowerCase().includes(search);
+      const matchesSearch = !search || `${donation.foodName} ${donation.categoryName} ${donation.status} ${donation.isVisible ? '' : 'oculta'} ${donation.beneficiaryName ?? ''}`.toLocaleLowerCase().includes(search);
       return matchesStatus && matchesSearch;
     });
   });
@@ -88,13 +98,16 @@ export class DonorPage {
   constructor() { this.loadDashboard(); }
 
   select(section: DonorSection): void {
+    if (section !== 'edit' && this.editingDonation()) this.resetDonationForm();
     this.section.set(section);
     this.menuOpen.set(false);
+    this.donationActionsId.set(null);
+    if (section !== 'edit') this.editingDonation.set(null);
     if (section === 'dashboard') this.loadDashboard();
     if (section === 'donations') this.loadDonations();
     if (section === 'requests') this.loadRequests();
     if (section === 'history') this.loadHistory();
-    if (section === 'create') {
+    if (section === 'create' || section === 'edit') {
       this.donationFormError.set('');
       this.donationCreateMessage.set('');
       this.loadDonationCreateOptions();
@@ -188,23 +201,25 @@ export class DonorPage {
     this.donationFormError.set('');
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      this.clearDonationImage(input);
+      this.clearDonationImage(input, false);
       this.donationFormError.set('La imagen debe ser JPG, PNG o WEBP.');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      this.clearDonationImage(input);
+      this.clearDonationImage(input, false);
       this.donationFormError.set('La imagen debe pesar menos de 5 MB.');
       return;
     }
     this.releaseImagePreview();
     this.selectedImage.set(file);
     this.selectedImagePreview.set(URL.createObjectURL(file));
+    this.removeCurrentImage.set(false);
   }
 
-  clearDonationImage(input?: HTMLInputElement): void {
+  clearDonationImage(input?: HTMLInputElement, removeCurrent = true): void {
     this.releaseImagePreview();
     this.selectedImage.set(null);
+    if (removeCurrent && this.editingDonation()) this.removeCurrentImage.set(true);
     if (input) input.value = '';
   }
 
@@ -236,14 +251,20 @@ export class DonorPage {
     }
 
     this.donationSaving.set(true);
-    this.auth.createDonorDonation({
+    const input = {
       foodName: this.createFoodName().trim(), categoryId: this.createCategoryId(), quantity,
       unit: this.createUnit(), description: this.createDescription(),
       pickupStartsAt: this.createPickupStartsAt(), pickupEndsAt: this.createPickupEndsAt(), image: this.selectedImage(),
-    }).subscribe({
+    };
+    const editing = this.editingDonation();
+    const save: Observable<unknown> = editing
+      ? this.auth.updateDonorDonation(editing.id, input, this.removeCurrentImage())
+      : this.auth.createDonorDonation(input);
+    save.subscribe({
       next: () => {
         this.donationSaving.set(false);
-        this.donationCreateMessage.set('La donación se publicó correctamente.');
+        this.donationCreateMessage.set(editing ? 'La donación se actualizó correctamente.' : 'La donación se publicó correctamente.');
+        this.editingDonation.set(null);
         this.resetDonationForm(form.querySelector<HTMLInputElement>('input[type="file"]') ?? undefined);
         this.select('donations');
       },
@@ -268,7 +289,61 @@ export class DonorPage {
     this.createDescription.set('');
     this.createPickupStartsAt.set(localDateTimeAfter(1));
     this.createPickupEndsAt.set(localDateTimeAfter(4));
-    this.clearDonationImage(imageInput);
+    this.removeCurrentImage.set(false);
+    this.clearDonationImage(imageInput, false);
+  }
+
+  toggleDonationActions(id: string): void {
+    this.donationActionsId.update((current) => current === id ? null : id);
+  }
+
+  canEditDonation(donation: DonorManagementDonation): boolean {
+    return donation.status === 'available' && donation.requestCount === 0;
+  }
+
+  editDonation(donation: DonorManagementDonation): void {
+    if (!this.canEditDonation(donation)) return;
+    this.editingDonation.set(donation);
+    this.donationActionsId.set(null);
+    this.donationFormError.set('');
+    this.createFoodName.set(donation.foodName);
+    this.createCategoryId.set(donation.categoryId ?? '');
+    this.createQuantity.set(String(donation.quantity));
+    this.createUnit.set(donation.unit);
+    this.createDescription.set(donation.description ?? '');
+    this.createPickupStartsAt.set(localDateTimeValue(donation.pickupStartsAt));
+    this.createPickupEndsAt.set(localDateTimeValue(donation.pickupEndsAt));
+    this.releaseImagePreview();
+    this.selectedImage.set(null);
+    this.selectedImagePreview.set(donation.imageUrl);
+    this.removeCurrentImage.set(false);
+    this.section.set('edit');
+    this.menuOpen.set(false);
+    this.loadDonationCreateOptions();
+  }
+
+  toggleDonationVisibility(donation: DonorManagementDonation): void {
+    this.donationActionsId.set(null);
+    this.auth.setDonorDonationVisibility(donation.id, donation.isVisible).subscribe({
+      next: () => {
+        this.donationCreateMessage.set(donation.isVisible ? 'La donación quedó oculta para las demás organizaciones.' : 'La donación volvió a estar disponible.');
+        this.loadDonations();
+      },
+      error: (error: Error) => this.donationsError.set(error.message || 'No se pudo cambiar la visibilidad de la donación.'),
+    });
+  }
+
+  deleteDonation(donation: DonorManagementDonation): void {
+    this.donationActionsId.set(null);
+    if (donation.requestCount > 0) return;
+    if (!window.confirm(`¿Eliminar la donación “${donation.foodName}”? Esta acción no se puede deshacer.`)) return;
+    this.auth.deleteDonorDonation(donation.id).subscribe({
+      next: () => {
+        this.donationCreateMessage.set('La donación se eliminó correctamente.');
+        this.loadDonations();
+      },
+      error: (error: Error) => this.donationsError.set(error.message || 'No se pudo eliminar la donación.'),
+    });
   }
 
   historyDate(value: string): string {
@@ -337,7 +412,8 @@ export class DonorPage {
   setDonationFilter(filter: DonationStatusFilter): void { this.donationStatusFilter.set(filter); }
   donationCount(filter: DonationStatusFilter): number {
     if (filter === 'all') return this.donations().length;
-    if (filter === 'available') return this.donations().filter((donation) => donation.status === 'available').length;
+    if (filter === 'available') return this.donations().filter((donation) => donation.status === 'available' && donation.isVisible).length;
+    if (filter === 'hidden') return this.donations().filter((donation) => !donation.isVisible).length;
     if (filter === 'reserved') return this.donations().filter((donation) => ['requested', 'reserved', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status)).length;
     return this.donations().filter((donation) => ['delivered', 'completed', 'expired', 'cancelled'].includes(donation.status)).length;
   }

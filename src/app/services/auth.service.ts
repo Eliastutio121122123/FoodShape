@@ -60,6 +60,7 @@ export interface DonorDashboardDonation {
   quantity: number;
   unit: string;
   status: string;
+  isVisible: boolean;
   expiresAt: string;
   pickupStartsAt: string;
   pickupEndsAt: string;
@@ -87,11 +88,13 @@ export interface DonorDashboardSnapshot {
 }
 export interface DonorManagementDonation {
   id: string;
+  categoryId: string | null;
   foodName: string;
   categoryName: string;
   quantity: number;
   unit: string;
   status: string;
+  isVisible: boolean;
   expiresAt: string;
   pickupStartsAt: string;
   pickupEndsAt: string;
@@ -613,7 +616,7 @@ export class AuthService {
       if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
 
       const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
-        .select('id, food_name, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at, created_at')
+        .select('id, food_name, quantity, unit, status, is_visible, expires_at, pickup_starts_at, pickup_ends_at, created_at')
         .eq('donor_organization_id', organization.id).order('created_at', { ascending: false });
       if (donationsError) throw donationsError;
       const donations = donationRows ?? [];
@@ -663,7 +666,7 @@ export class AuthService {
 
       const recentDonations = donations.slice(0, 3).map((donation) => ({
         id: donation.id, foodName: donation.food_name, quantity: Number(donation.quantity), unit: donation.unit,
-        status: donation.status, expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
+        status: donation.status, isVisible: donation.is_visible, expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
         pickupEndsAt: donation.pickup_ends_at, createdAt: donation.created_at,
         requestCount: (requestsByDonation.get(donation.id) ?? []).length,
       }));
@@ -706,7 +709,7 @@ export class AuthService {
       return {
         organizationName: organization.name,
         activeDonations: donations.filter(isCurrentlyActive).length,
-        availableDonations: donations.filter((donation) => donation.status === 'available' && Date.parse(donation.expires_at) > now.getTime()).length,
+        availableDonations: donations.filter((donation) => donation.status === 'available' && donation.is_visible && Date.parse(donation.expires_at) > now.getTime()).length,
         newRequests: requests.filter((request) => request.status === 'pending').length,
         completedDeliveries: deliveries.length,
         donatedKilograms: kilograms,
@@ -817,6 +820,117 @@ export class AuthService {
     })());
   }
 
+  updateDonorDonation(id: string, input: CreateDonorDonationInput, removeCurrentImage: boolean): Observable<void> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para editar una donación.');
+      const name = input.foodName.trim();
+      const quantity = Number(input.quantity);
+      const pickupStartsAt = Date.parse(input.pickupStartsAt);
+      const pickupEndsAt = Date.parse(input.pickupEndsAt);
+      if (!name || name.length > 120) throw new Error('Escribe un nombre de alimento de hasta 120 caracteres.');
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('La cantidad debe ser mayor que cero.');
+      if (!['kg', 'g', 'lb', 'unit', 'portion', 'box', 'package'].includes(input.unit)) throw new Error('Selecciona una unidad válida.');
+      if (!Number.isFinite(pickupStartsAt) || pickupStartsAt <= Date.now()) throw new Error('La recogida debe comenzar en una fecha futura.');
+      if (!Number.isFinite(pickupEndsAt) || pickupEndsAt <= pickupStartsAt) throw new Error('La fecha límite debe ser posterior al inicio de recogida.');
+
+      const [organizationResult, categoryResult, currentResult, requestsResult] = await Promise.all([
+        this.supabase.from('organizations').select('id, address, city, status, verification_status')
+          .eq('owner_id', user.id).eq('organization_type', 'donor').maybeSingle(),
+        this.supabase.from('food_categories').select('id').eq('id', input.categoryId).eq('active', true).maybeSingle(),
+        this.supabase.from('donations').select('id, image_path, status, is_visible').eq('id', id).maybeSingle(),
+        this.supabase.from('donation_requests').select('id', { count: 'exact', head: true }).eq('donation_id', id),
+      ]);
+      if (organizationResult.error) throw organizationResult.error;
+      if (categoryResult.error) throw categoryResult.error;
+      if (currentResult.error) throw currentResult.error;
+      if (requestsResult.error) throw requestsResult.error;
+      const organization = organizationResult.data;
+      const current = currentResult.data;
+      if (!organization || organization.status !== 'active' || organization.verification_status !== 'approved') {
+        throw new Error('La organización debe estar activa y verificada para editar donaciones.');
+      }
+      if (requestsResult.count && requestsResult.count > 0) {
+        throw new Error('No se puede editar una donación que ya recibió solicitudes.');
+      }
+      if (!current || current.status !== 'available') {
+        throw new Error('Solo puedes editar donaciones disponibles.');
+      }
+      if (!categoryResult.data) throw new Error('Selecciona una categoría de alimento activa.');
+
+      let imagePath = removeCurrentImage ? null : current.image_path as string | null;
+      let newImagePath: string | null = null;
+      if (input.image) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(input.image.type)) throw new Error('La imagen debe ser JPG, PNG o WEBP.');
+        if (input.image.size > 5 * 1024 * 1024) throw new Error('La imagen debe pesar menos de 5 MB.');
+        const extension = input.image.type === 'image/png' ? 'png' : input.image.type === 'image/webp' ? 'webp' : 'jpg';
+        newImagePath = `${organization.id}/${crypto.randomUUID()}.${extension}`;
+        const { error: uploadError } = await this.supabase.storage.from('foodshare-donations').upload(newImagePath, input.image, {
+          cacheControl: '3600', upsert: false, contentType: input.image.type,
+        });
+        if (uploadError) throw new Error(`No se pudo subir la imagen: ${uploadError.message}`);
+        imagePath = newImagePath;
+      }
+
+      const { data: updated, error: updateError } = await this.supabase.from('donations').update({
+        food_name: name, category_id: input.categoryId, quantity, unit: input.unit,
+        notes: input.description.trim() || null, address: organization.address, city: organization.city,
+        pickup_starts_at: new Date(pickupStartsAt).toISOString(),
+        pickup_ends_at: new Date(pickupEndsAt).toISOString(), expires_at: new Date(pickupEndsAt).toISOString(),
+        image_path: imagePath,
+      }).eq('id', id).eq('donor_organization_id', organization.id).select('id').maybeSingle();
+      if (updateError || !updated) {
+        if (newImagePath) await this.supabase.storage.from('foodshare-donations').remove([newImagePath]);
+        throw updateError ?? new Error('No se pudo actualizar la donación.');
+      }
+      if (current.image_path && current.image_path !== imagePath) {
+        const { error: removeError } = await this.supabase.storage.from('foodshare-donations').remove([current.image_path]);
+        if (removeError) console.warn('No se pudo eliminar la imagen anterior de la donación.', removeError);
+      }
+    })());
+  }
+
+  setDonorDonationVisibility(id: string, hidden: boolean): Observable<void> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para cambiar la visibilidad.');
+      const { data: organization, error: organizationError } = await this.supabase.from('organizations')
+        .select('id').eq('owner_id', user.id).eq('organization_type', 'donor').maybeSingle();
+      if (organizationError) throw organizationError;
+      if (!organization) throw new Error('No encontramos tu organización donante.');
+      const { data, error } = await this.supabase.from('donations')
+        .update({ is_visible: !hidden })
+        .eq('id', id).eq('donor_organization_id', organization.id)
+        .eq('status', 'available').eq('is_visible', hidden).select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('Solo puedes ocultar o mostrar donaciones disponibles.');
+    })());
+  }
+
+  deleteDonorDonation(id: string): Observable<void> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para eliminar una donación.');
+      const { data: organization, error: organizationError } = await this.supabase.from('organizations')
+        .select('id').eq('owner_id', user.id).eq('organization_type', 'donor').maybeSingle();
+      if (organizationError) throw organizationError;
+      if (!organization) throw new Error('No encontramos tu organización donante.');
+      const { data: donation, error: donationError } = await this.supabase.from('donations')
+        .select('id, image_path').eq('id', id).eq('donor_organization_id', organization.id).maybeSingle();
+      if (donationError) throw donationError;
+      if (!donation) throw new Error('No se encontró la donación que quieres eliminar.');
+      const { data, error } = await this.supabase.from('donations').delete()
+        .eq('id', id).eq('donor_organization_id', organization.id).select('id').maybeSingle();
+      if (error?.code === '23503') throw new Error('No se puede eliminar porque ya tiene solicitudes. Puedes ocultarla para que no vuelva a aparecer.');
+      if (error) throw error;
+      if (!data) throw new Error('No se pudo eliminar la donación. Revisa si ya tiene solicitudes asociadas.');
+      if (donation.image_path) {
+        const { error: imageError } = await this.supabase.storage.from('foodshare-donations').remove([donation.image_path]);
+        if (imageError) console.warn('No se pudo eliminar la imagen de la donación.', imageError);
+      }
+    })());
+  }
+
   loadDonorDonations(): Observable<DonorDonationsSnapshot> {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
@@ -827,11 +941,11 @@ export class AuthService {
       if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
 
       const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
-        .select('id, food_name, category_id, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at, created_at, image_path, notes, address, city, food_categories(name)')
+        .select('id, food_name, category_id, quantity, unit, status, is_visible, expires_at, pickup_starts_at, pickup_ends_at, created_at, image_path, notes, address, city, food_categories(name)')
         .eq('donor_organization_id', organization.id).order('created_at', { ascending: false });
       if (donationsError) throw donationsError;
       const donations = (donationRows ?? []) as unknown as {
-        id: string; food_name: string; category_id: string | null; quantity: number; unit: string; status: string;
+        id: string; food_name: string; category_id: string | null; quantity: number; unit: string; status: string; is_visible: boolean;
         expires_at: string; pickup_starts_at: string; pickup_ends_at: string; created_at: string;
         image_path: string | null;
         notes: string | null; address: string; city: string;
@@ -878,8 +992,8 @@ export class AuthService {
             .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
           const category = Array.isArray(donation.food_categories) ? donation.food_categories[0] : donation.food_categories;
           return {
-            id: donation.id, foodName: donation.food_name, categoryName: category?.name ?? 'Otros',
-            quantity: Number(donation.quantity), unit: donation.unit, status: donation.status,
+            id: donation.id, categoryId: donation.category_id, foodName: donation.food_name, categoryName: category?.name ?? 'Otros',
+            quantity: Number(donation.quantity), unit: donation.unit, status: donation.status, isVisible: donation.is_visible,
             expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
             pickupEndsAt: donation.pickup_ends_at, createdAt: donation.created_at,
             imageUrl: donation.image_path ? this.supabase.storage.from('foodshare-donations').getPublicUrl(donation.image_path).data.publicUrl : null,
