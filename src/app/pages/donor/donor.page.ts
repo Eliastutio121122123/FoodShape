@@ -334,7 +334,10 @@ export class DonorPage {
   }
 
   donationDetail(donation: DonorManagementDonation): string {
-    const amount = `${donation.quantity} ${donation.unit}`;
+    const unitLabels: Record<string, string> = {
+      kg: 'kg', g: 'g', lb: 'lb', unit: 'unidades', portion: 'porciones', box: 'cajas', package: 'paquetes',
+    };
+    const amount = `${donation.quantity} ${unitLabels[donation.unit] ?? donation.unit}`;
     if (['delivered', 'completed'].includes(donation.status)) {
       const date = donation.deliveredAt ? new Intl.DateTimeFormat('es-DO', { day: 'numeric', month: 'short' }).format(new Date(donation.deliveredAt)) : '';
       return `${amount} · Entregada${date ? ` el ${date}` : ''}`;
