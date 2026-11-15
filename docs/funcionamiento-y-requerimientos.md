@@ -16,6 +16,7 @@ Esta actualización reemplaza las descripciones anteriores de los requerimientos
 - **Historial:** consulta entregas completadas y calcula alimentos entregados, entregas confirmadas y organizaciones apoyadas.
 - **Foto de perfil:** la barra lateral del panel donante muestra la foto guardada en el perfil; usa las iniciales como alternativa si no hay foto.
 - **Correcciones visuales:** las tarjetas mantienen visibles los datos aunque haya foto; el botón «Ver detalle» abre la ficha; el menú de tres puntos usa opciones legibles y no hereda la forma circular del botón.
+- **Registro de organizaciones:** se corrigió el solapamiento del botón «Enviar registro» con los campos del formulario, que podía interceptar clics al desplazarse. RNC se declara como texto numérico con autocompletado desactivado y longitud limitada; teléfono usa el tipo telefónico. El ajuste aplica a los formularios de donantes y beneficiarias.
 
 ### Migraciones y permisos requeridos
 
