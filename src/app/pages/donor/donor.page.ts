@@ -28,6 +28,7 @@ export class DonorPage {
   readonly dashboardLoading = signal(false);
   readonly dashboardError = signal('');
   readonly donations = signal<DonorManagementDonation[]>([]);
+  readonly selectedDonation = signal<DonorManagementDonation | null>(null);
   readonly donationsLoading = signal(false);
   readonly donationsError = signal('');
   readonly donationSearch = signal('');
@@ -109,13 +110,32 @@ export class DonorPage {
     });
   }
 
-  loadDonations(): void {
+  loadDonations(selectDonationId?: string): void {
+    this.selectedDonation.set(null);
     this.donationsLoading.set(true);
     this.donationsError.set('');
     this.auth.loadDonorDonations().subscribe({
-      next: (snapshot) => { this.donations.set(snapshot.donations); this.donationsLoading.set(false); },
+      next: (snapshot) => {
+        this.donations.set(snapshot.donations);
+        this.selectedDonation.set(selectDonationId ? snapshot.donations.find((donation) => donation.id === selectDonationId) ?? null : null);
+        this.donationsLoading.set(false);
+      },
       error: (error: Error) => { this.donationsError.set(error.message || 'No se pudieron cargar las donaciones.'); this.donationsLoading.set(false); },
     });
+  }
+
+  openDonationDetails(donation: DonorManagementDonation): void {
+    this.selectedDonation.set(donation);
+  }
+
+  openDashboardDonationDetails(donationId: string): void {
+    this.section.set('donations');
+    this.menuOpen.set(false);
+    this.loadDonations(donationId);
+  }
+
+  closeDonationDetails(): void {
+    this.selectedDonation.set(null);
   }
 
   loadRequests(): void {

@@ -100,6 +100,9 @@ export interface DonorManagementDonation {
   beneficiaryName: string | null;
   deliveredAt: string | null;
   imageUrl: string | null;
+  description: string | null;
+  pickupAddress: string;
+  pickupCity: string;
 }
 export interface DonorDonationsSnapshot {
   organizationName: string;
@@ -824,13 +827,14 @@ export class AuthService {
       if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
 
       const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
-        .select('id, food_name, category_id, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at, created_at, image_path, food_categories(name)')
+        .select('id, food_name, category_id, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at, created_at, image_path, notes, address, city, food_categories(name)')
         .eq('donor_organization_id', organization.id).order('created_at', { ascending: false });
       if (donationsError) throw donationsError;
       const donations = (donationRows ?? []) as unknown as {
         id: string; food_name: string; category_id: string | null; quantity: number; unit: string; status: string;
         expires_at: string; pickup_starts_at: string; pickup_ends_at: string; created_at: string;
         image_path: string | null;
+        notes: string | null; address: string; city: string;
         food_categories: { name: string } | { name: string }[] | null;
       }[];
       const donationIds = donations.map((donation) => donation.id);
@@ -879,6 +883,9 @@ export class AuthService {
             expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
             pickupEndsAt: donation.pickup_ends_at, createdAt: donation.created_at,
             imageUrl: donation.image_path ? this.supabase.storage.from('foodshare-donations').getPublicUrl(donation.image_path).data.publicUrl : null,
+            description: donation.notes,
+            pickupAddress: donation.address,
+            pickupCity: donation.city,
             requestCount: relatedRequests.length,
             beneficiaryName: beneficiaryRequest ? beneficiaryNames.get(beneficiaryRequest.beneficiary_organization_id) ?? null : null,
             deliveredAt,
