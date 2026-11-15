@@ -2,11 +2,17 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { IonContent } from '@ionic/angular';
 import { Router, RouterLink } from '@angular/router';
-import { AuthService, DonorDashboardSnapshot, DonorHistorySnapshot, DonorManagementDonation, DonorRequestInboxItem } from '../../services/auth.service';
+import { AuthService, DonorDashboardSnapshot, DonorDonationCreateOptions, DonorHistorySnapshot, DonorManagementDonation, DonorRequestInboxItem } from '../../services/auth.service';
 
 type DonorSection = 'dashboard' | 'donations' | 'requests' | 'history' | 'create';
 type DonationStatusFilter = 'all' | 'available' | 'reserved' | 'finalized';
 type RequestStatusFilter = 'pending' | 'accepted' | 'finalized';
+
+function localDateTimeAfter(hours: number): string {
+  const date = new Date(Date.now() + hours * 60 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 @Component({
   selector: 'app-donor',
@@ -38,6 +44,21 @@ export class DonorPage {
   readonly history = signal<DonorHistorySnapshot | null>(null);
   readonly historyLoading = signal(false);
   readonly historyError = signal('');
+  readonly createOptions = signal<DonorDonationCreateOptions | null>(null);
+  readonly createOptionsLoading = signal(false);
+  readonly createOptionsError = signal('');
+  readonly donationSaving = signal(false);
+  readonly donationFormError = signal('');
+  readonly donationCreateMessage = signal('');
+  readonly createFoodName = signal('');
+  readonly createCategoryId = signal('');
+  readonly createQuantity = signal('');
+  readonly createUnit = signal('');
+  readonly createDescription = signal('');
+  readonly createPickupStartsAt = signal(localDateTimeAfter(1));
+  readonly createPickupEndsAt = signal(localDateTimeAfter(4));
+  readonly selectedImage = signal<File | null>(null);
+  readonly selectedImagePreview = signal<string | null>(null);
   readonly pendingRequestCount = computed(() => this.requestsLoaded()
     ? this.requests().filter((request) => request.status === 'pending').length
     : this.dashboard()?.newRequests ?? 0);
@@ -72,6 +93,11 @@ export class DonorPage {
     if (section === 'donations') this.loadDonations();
     if (section === 'requests') this.loadRequests();
     if (section === 'history') this.loadHistory();
+    if (section === 'create') {
+      this.donationFormError.set('');
+      this.donationCreateMessage.set('');
+      this.loadDonationCreateOptions();
+    }
   }
 
   loadDashboard(): void {
@@ -109,6 +135,120 @@ export class DonorPage {
       next: (snapshot) => { this.history.set(snapshot); this.historyLoading.set(false); },
       error: (error: Error) => { this.historyError.set(error.message || 'No se pudo cargar el historial.'); this.historyLoading.set(false); },
     });
+  }
+
+  loadDonationCreateOptions(): void {
+    if (this.createOptionsLoading()) return;
+    this.createOptionsLoading.set(true);
+    this.createOptionsError.set('');
+    this.auth.loadDonorDonationCreateOptions().subscribe({
+      next: (options) => {
+        this.createOptions.set(options);
+        if (!this.createCategoryId() && options.categories.length) this.createCategoryId.set(options.categories[0].id);
+        this.createOptionsLoading.set(false);
+      },
+      error: (error: Error) => {
+        this.createOptionsError.set(error.message || 'No se pudieron cargar los datos para publicar.');
+        this.createOptionsLoading.set(false);
+      },
+    });
+  }
+
+  setCreateFoodName(event: Event): void { this.createFoodName.set((event.target as HTMLInputElement).value); }
+  setCreateCategory(event: Event): void { this.createCategoryId.set((event.target as HTMLSelectElement).value); }
+  setCreateQuantity(event: Event): void { this.createQuantity.set((event.target as HTMLInputElement).value); }
+  setCreateUnit(event: Event): void { this.createUnit.set((event.target as HTMLSelectElement).value); }
+  setCreateDescription(event: Event): void { this.createDescription.set((event.target as HTMLTextAreaElement).value); }
+  setCreatePickupStartsAt(event: Event): void { this.createPickupStartsAt.set((event.target as HTMLInputElement).value); }
+  setCreatePickupEndsAt(event: Event): void { this.createPickupEndsAt.set((event.target as HTMLInputElement).value); }
+
+  selectDonationImage(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.donationFormError.set('');
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      this.clearDonationImage(input);
+      this.donationFormError.set('La imagen debe ser JPG, PNG o WEBP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      this.clearDonationImage(input);
+      this.donationFormError.set('La imagen debe pesar menos de 5 MB.');
+      return;
+    }
+    this.releaseImagePreview();
+    this.selectedImage.set(file);
+    this.selectedImagePreview.set(URL.createObjectURL(file));
+  }
+
+  clearDonationImage(input?: HTMLInputElement): void {
+    this.releaseImagePreview();
+    this.selectedImage.set(null);
+    if (input) input.value = '';
+  }
+
+  submitDonation(event: Event): void {
+    event.preventDefault();
+    if (this.donationSaving()) return;
+    this.donationFormError.set('');
+    const form = event.target as HTMLFormElement;
+    if (!form.reportValidity()) return;
+    const options = this.createOptions();
+    if (!options) {
+      this.donationFormError.set('Espera a que carguen los datos de tu organización.');
+      return;
+    }
+    const startsAt = new Date(this.createPickupStartsAt()).getTime();
+    const endsAt = new Date(this.createPickupEndsAt()).getTime();
+    if (!Number.isFinite(startsAt) || startsAt <= Date.now()) {
+      this.donationFormError.set('La fecha de inicio debe ser posterior a la hora actual.');
+      return;
+    }
+    if (!Number.isFinite(endsAt) || endsAt <= startsAt) {
+      this.donationFormError.set('La fecha límite debe ser posterior al inicio de la recogida.');
+      return;
+    }
+    const quantity = Number(this.createQuantity());
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      this.donationFormError.set('La cantidad debe ser mayor que cero.');
+      return;
+    }
+
+    this.donationSaving.set(true);
+    this.auth.createDonorDonation({
+      foodName: this.createFoodName().trim(), categoryId: this.createCategoryId(), quantity,
+      unit: this.createUnit(), description: this.createDescription(),
+      pickupStartsAt: this.createPickupStartsAt(), pickupEndsAt: this.createPickupEndsAt(), image: this.selectedImage(),
+    }).subscribe({
+      next: () => {
+        this.donationSaving.set(false);
+        this.donationCreateMessage.set('La donación se publicó correctamente.');
+        this.resetDonationForm(form.querySelector<HTMLInputElement>('input[type="file"]') ?? undefined);
+        this.select('donations');
+      },
+      error: (error: Error) => {
+        this.donationFormError.set(error.message || 'No se pudo publicar la donación. Inténtalo de nuevo.');
+        this.donationSaving.set(false);
+      },
+    });
+  }
+
+  private releaseImagePreview(): void {
+    const preview = this.selectedImagePreview();
+    if (preview) URL.revokeObjectURL(preview);
+    this.selectedImagePreview.set(null);
+  }
+
+  private resetDonationForm(imageInput?: HTMLInputElement): void {
+    this.createFoodName.set('');
+    this.createCategoryId.set(this.createOptions()?.categories[0]?.id ?? '');
+    this.createQuantity.set('');
+    this.createUnit.set('');
+    this.createDescription.set('');
+    this.createPickupStartsAt.set(localDateTimeAfter(1));
+    this.createPickupEndsAt.set(localDateTimeAfter(4));
+    this.clearDonationImage(imageInput);
   }
 
   historyDate(value: string): string {
