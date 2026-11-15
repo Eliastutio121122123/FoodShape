@@ -17,6 +17,8 @@ export class BeneficiaryPage {
   readonly error = signal('');
   readonly section = signal<BeneficiarySection>('home');
   readonly query = signal('');
+  readonly selectedCategory = signal('Todas');
+  readonly sortMode = signal<'recent' | 'expiry' | 'quantity'>('recent');
   readonly notificationsOpen = signal(false);
   readonly selectedDonation = signal<BeneficiaryDonation | null>(null);
   readonly requestQuantity = signal(1);
@@ -26,11 +28,20 @@ export class BeneficiaryPage {
   readonly requestSent = signal(false);
 
   readonly availableDonations = computed(() => this.data()?.donations ?? []);
+  readonly donationCategories = computed(() => ['Todas', ...new Set(this.availableDonations().map((donation) => donation.categoryName))]);
   readonly filteredDonations = computed(() => {
     const needle = this.query().trim().toLocaleLowerCase();
-    return this.availableDonations().filter((donation) =>
-      !needle || `${donation.foodName} ${donation.categoryName} ${donation.city}`.toLocaleLowerCase().includes(needle),
+    const category = this.selectedCategory();
+    const results = this.availableDonations().filter((donation) =>
+      (category === 'Todas' || donation.categoryName === category)
+      && (!needle || `${donation.foodName} ${donation.categoryName} ${donation.city}`.toLocaleLowerCase().includes(needle)),
     );
+    const sortMode = this.sortMode();
+    return results.sort((a, b) => sortMode === 'expiry'
+      ? Date.parse(a.expiresAt) - Date.parse(b.expiresAt)
+      : sortMode === 'quantity'
+        ? b.quantity - a.quantity
+        : Date.parse(b.createdAt) - Date.parse(a.createdAt));
   });
   readonly pendingRequests = computed(() => (this.data()?.requests ?? []).filter((request) => request.status === 'pending'));
   readonly activeRequests = computed(() => (this.data()?.requests ?? []).filter((request) =>
@@ -61,6 +72,8 @@ export class BeneficiaryPage {
 
   navigateTo(section: BeneficiarySection): void { this.section.set(section); this.selectedDonation.set(null); }
   updateSearch(event: Event): void { this.query.set((event.target as HTMLInputElement).value); }
+  setCategory(category: string): void { this.selectedCategory.set(category); }
+  setSortMode(event: Event): void { this.sortMode.set((event.target as HTMLSelectElement).value as 'recent' | 'expiry' | 'quantity'); }
   openDonation(donation: BeneficiaryDonation): void {
     this.selectedDonation.set(donation);
     this.requestQuantity.set(1);
