@@ -149,6 +149,46 @@ export interface DonorHistorySnapshot {
   supportedOrganizationsThisMonth: number;
   deliveries: DonorHistoryEntry[];
 }
+export interface BeneficiaryDonation {
+  id: string;
+  foodName: string;
+  categoryName: string;
+  quantity: number;
+  unit: string;
+  expiresAt: string;
+  pickupStartsAt: string;
+  pickupEndsAt: string;
+  city: string;
+  description: string | null;
+}
+export interface BeneficiaryRequest {
+  id: string;
+  donationId: string;
+  donationName: string;
+  categoryName: string;
+  requestedQuantity: number | null;
+  donationQuantity: number;
+  unit: string;
+  status: string;
+  requestedAt: string;
+  updatedAt: string;
+  deliveryStatus: string | null;
+  deliveredAt: string | null;
+  pickupAddress: string | null;
+  pickupCity: string;
+  pickupStartsAt: string;
+  pickupEndsAt: string;
+}
+export interface BeneficiaryDashboardSnapshot {
+  organizationName: string;
+  fullName: string;
+  verificationStatus: string;
+  organizationStatus: string;
+  donations: BeneficiaryDonation[];
+  requests: BeneficiaryRequest[];
+  receivedByUnitThisMonth: { unit: string; quantity: number }[];
+  notifications: { id: string; title: string; message: string; createdAt: string; read: boolean }[];
+}
 export interface DonorDonationCreateOptions {
   organizationId: string;
   organizationName: string;
@@ -603,6 +643,140 @@ export class AuthService {
 
   setPendingOrganizations(applications: readonly OrganizationApplication[]): void { this.applicationsState.set(applications); }
   removePendingOrganization(id: string): void { this.applicationsState.update((items) => items.filter((item) => item.id !== id)); }
+
+  loadBeneficiaryDashboard(): Observable<BeneficiaryDashboardSnapshot> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar el espacio de tu organización.');
+
+      const [profileResult, organizationResult] = await Promise.all([
+        this.supabase.from('profiles').select('id, full_name, role').eq('id', user.id).maybeSingle(),
+        this.supabase.from('organizations').select('id, name, verification_status, status, city')
+          .eq('owner_id', user.id).eq('organization_type', 'beneficiary').maybeSingle(),
+      ]);
+      if (profileResult.error) throw profileResult.error;
+      if (organizationResult.error) throw organizationResult.error;
+      if (profileResult.data?.role !== 'beneficiary') throw new Error('Esta sección es exclusiva para cuentas beneficiarias.');
+      const organization = organizationResult.data;
+      if (!organization) throw new Error('No encontramos una organización beneficiaria asociada a esta cuenta.');
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const [donationsResult, requestResult, notificationResult] = await Promise.all([
+        this.supabase.from('donations')
+          .select('id, food_name, quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, city, notes, food_categories(name)')
+          .eq('status', 'available').eq('is_visible', true).gt('expires_at', now.toISOString())
+          .order('created_at', { ascending: false }),
+        this.supabase.from('donation_requests')
+          .select('id, donation_id, status, quantity_requested, requested_at, updated_at')
+          .eq('beneficiary_organization_id', organization.id).order('requested_at', { ascending: false }),
+        this.supabase.from('notifications').select('id, title, message, created_at, read_at')
+          .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
+      ]);
+      if (donationsResult.error) throw donationsResult.error;
+      if (requestResult.error) throw requestResult.error;
+      if (notificationResult.error) throw notificationResult.error;
+
+      type CategoryRelation = { name: string } | { name: string }[] | null;
+      const categoryName = (relation: CategoryRelation): string => Array.isArray(relation) ? relation[0]?.name ?? 'Otros' : relation?.name ?? 'Otros';
+      const donations: BeneficiaryDonation[] = (donationsResult.data ?? []).map((row) => ({
+        id: row.id, foodName: row.food_name, categoryName: categoryName(row.food_categories as CategoryRelation),
+        quantity: Number(row.quantity), unit: row.unit, expiresAt: row.expires_at,
+        pickupStartsAt: row.pickup_starts_at, pickupEndsAt: row.pickup_ends_at, city: row.city,
+        description: row.notes,
+      }));
+
+      const requests = requestResult.data ?? [];
+      const requestIds = requests.map((request) => request.id);
+      const requestDonationIds = [...new Set(requests.map((request) => request.donation_id))];
+      const [deliveryResult, requestDonationsResult] = await Promise.all([
+        requestIds.length
+          ? this.supabase.from('deliveries').select('id, request_id, status, delivered_at, created_at').in('request_id', requestIds)
+          : Promise.resolve({ data: [], error: null }),
+        requestDonationIds.length
+          ? this.supabase.from('donations').select('id, food_name, quantity, unit, city, pickup_starts_at, pickup_ends_at, food_categories(name)').in('id', requestDonationIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (deliveryResult.error) throw deliveryResult.error;
+      if (requestDonationsResult.error) throw requestDonationsResult.error;
+      const deliveriesByRequest = new Map((deliveryResult.data ?? []).map((delivery) => [delivery.request_id, delivery]));
+      const requestDonationsById = new Map((requestDonationsResult.data ?? []).map((donation) => [donation.id, donation]));
+      const acceptedDonationIds = [...new Set(requests.filter((request) => request.status === 'accepted').map((request) => request.donation_id))];
+      const acceptedDetailsResult = acceptedDonationIds.length
+        ? await this.supabase.from('donations').select('id, address').in('id', acceptedDonationIds)
+        : { data: [], error: null };
+      if (acceptedDetailsResult.error) throw acceptedDetailsResult.error;
+      const pickupAddressByDonation = new Map((acceptedDetailsResult.data ?? []).map((donation) => [donation.id, donation.address]));
+      const requestItems: BeneficiaryRequest[] = requests.map((request) => {
+        const donation = requestDonationsById.get(request.donation_id);
+        const categoryRelation = donation?.food_categories as CategoryRelation | undefined;
+        const delivery = deliveriesByRequest.get(request.id);
+        return {
+          id: request.id, donationId: request.donation_id, donationName: donation?.food_name ?? 'Donación ya no disponible',
+          categoryName: categoryName(categoryRelation ?? null), requestedQuantity: request.quantity_requested === null ? null : Number(request.quantity_requested),
+          donationQuantity: Number(donation?.quantity ?? request.quantity_requested ?? 0), unit: donation?.unit ?? 'unidades', status: request.status,
+          requestedAt: request.requested_at, updatedAt: request.updated_at,
+          deliveryStatus: delivery?.status ?? null, deliveredAt: delivery?.delivered_at ?? null,
+          pickupAddress: request.status === 'accepted' ? pickupAddressByDonation.get(request.donation_id) ?? null : null,
+          pickupCity: donation?.city ?? '', pickupStartsAt: donation?.pickup_starts_at ?? '', pickupEndsAt: donation?.pickup_ends_at ?? '',
+        };
+      });
+
+      const receivedByUnit = new Map<string, number>();
+      for (const request of requestItems) {
+        if (!request.deliveredAt || Date.parse(request.deliveredAt) < Date.parse(monthStart)) continue;
+        const quantity = request.requestedQuantity ?? request.donationQuantity;
+        receivedByUnit.set(request.unit, (receivedByUnit.get(request.unit) ?? 0) + quantity);
+      }
+
+      return {
+        organizationName: organization.name,
+        fullName: profileResult.data.full_name,
+        verificationStatus: organization.verification_status,
+        organizationStatus: organization.status,
+        donations,
+        requests: requestItems,
+        receivedByUnitThisMonth: [...receivedByUnit].map(([unit, quantity]) => ({ unit, quantity })),
+        notifications: (notificationResult.data ?? []).map((notification) => ({
+          id: notification.id, title: notification.title, message: notification.message,
+          createdAt: notification.created_at, read: Boolean(notification.read_at),
+        })),
+      };
+    })());
+  }
+
+  createBeneficiaryDonationRequest(donationId: string, quantity: number, message: string): Observable<void> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para solicitar una donación.');
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Indica una cantidad válida.');
+      if (message.trim().length > 500) throw new Error('El mensaje no puede superar los 500 caracteres.');
+
+      const [{ data: organization, error: organizationError }, { data: donation, error: donationError }] = await Promise.all([
+        this.supabase.from('organizations').select('id, status, verification_status')
+          .eq('owner_id', user.id).eq('organization_type', 'beneficiary').maybeSingle(),
+        this.supabase.from('donations').select('id, quantity, status, is_visible, expires_at')
+          .eq('id', donationId).maybeSingle(),
+      ]);
+      if (organizationError) throw organizationError;
+      if (donationError) throw donationError;
+      if (!organization) throw new Error('No encontramos una organización beneficiaria asociada a esta cuenta.');
+      if (organization.status !== 'active' || organization.verification_status !== 'approved') {
+        throw new Error('La organización debe estar activa y verificada para solicitar donaciones.');
+      }
+      if (!donation || donation.status !== 'available' || !donation.is_visible || Date.parse(donation.expires_at) <= Date.now()) {
+        throw new Error('Esta donación ya no está disponible. Actualiza la lista e inténtalo con otra.');
+      }
+      if (quantity > Number(donation.quantity)) throw new Error('La cantidad solicitada supera la cantidad disponible.');
+
+      const { error } = await this.supabase.from('donation_requests').insert({
+        donation_id: donation.id, beneficiary_organization_id: organization.id,
+        quantity_requested: quantity, message: message.trim() || null,
+      });
+      if (error?.code === '23505') throw new Error('Tu organización ya envió una solicitud para esta donación.');
+      if (error) throw error;
+    })());
+  }
 
 
   loadDonorDashboard(): Observable<DonorDashboardSnapshot> {

@@ -1,0 +1,105 @@
+<main class="beneficiary-app">
+  <header class="app-header">
+    <a class="brand" routerLink="/app/beneficiary" aria-label="FoodShare inicio"><span class="brand-mark">⌁</span><span>FoodShare</span></a>
+    <div class="header-actions">
+      <button class="notification-button" type="button" (click)="toggleNotifications()" aria-label="Notificaciones" [attr.aria-expanded]="notificationsOpen()">
+        ♧ @if (unreadCount() > 0) { <i>{{ unreadCount() }}</i> }
+      </button>
+      <a class="profile-link" routerLink="/app/profile"><span class="profile-avatar">{{ (data()?.organizationName || 'O').slice(0, 1).toUpperCase() }}</span><span>Mi perfil</span></a>
+    </div>
+    @if (notificationsOpen()) {
+      <section class="notifications-popover" aria-label="Notificaciones recientes">
+        <div class="popover-heading"><strong>Notificaciones</strong><button type="button" (click)="toggleNotifications()" aria-label="Cerrar">×</button></div>
+        @for (notification of data()?.notifications ?? []; track notification.id) {
+          <article class="notification-item" [class.unread]="!notification.read"><strong>{{ notification.title }}</strong><p>{{ notification.message }}</p><time>{{ formatDate(notification.createdAt) }}</time></article>
+        } @empty { <p class="notification-empty">No hay notificaciones recientes.</p> }
+      </section>
+    }
+  </header>
+
+  <div class="beneficiary-layout">
+    <aside class="sidebar">
+      <div class="organization-card"><span class="organization-avatar">{{ (data()?.organizationName || 'O').slice(0, 2).toUpperCase() }}</span><span><strong>{{ data()?.organizationName || 'Tu organización' }}</strong><small>Organización beneficiaria</small></span></div>
+      <p class="nav-label">MENÚ PRINCIPAL</p>
+      <nav class="side-nav" aria-label="Navegación beneficiaria">
+        <button type="button" [class.active]="section() === 'home'" (click)="navigateTo('home')"><span>⌂</span>Inicio</button>
+        <button type="button" [class.active]="section() === 'search' || section() === 'detail'" (click)="navigateTo('search')"><span>⌕</span>Buscar donaciones</button>
+        <button type="button" [class.active]="section() === 'requests'" (click)="navigateTo('requests')"><span>▤</span>Mis solicitudes@if (pendingRequests().length) { <b>{{ pendingRequests().length }}</b> }</button>
+        <button type="button" [class.active]="section() === 'history'" (click)="navigateTo('history')"><span>◷</span>Historial</button>
+      </nav>
+      <div class="sidebar-help"><strong>¿Necesitas ayuda?</strong><p>Revisa el horario y la cantidad antes de solicitar alimentos.</p><button type="button" (click)="navigateTo('requests')">Ver mis solicitudes →</button></div>
+      <a class="sidebar-profile" routerLink="/app/profile"><span class="profile-avatar">{{ (data()?.organizationName || 'O').slice(0, 1).toUpperCase() }}</span><span><strong>{{ data()?.fullName || 'Mi perfil' }}</strong><small>Cuenta beneficiaria</small></span><b>›</b></a>
+    </aside>
+
+    <section class="page-content">
+      <div class="breadcrumbs"><span>Panel de beneficiario</span><b>/</b><strong>{{ section() === 'home' ? 'Inicio' : section() === 'search' ? 'Buscar donaciones' : section() === 'requests' ? 'Mis solicitudes' : section() === 'history' ? 'Historial' : 'Detalle de donación' }}</strong><a class="mobile-profile" routerLink="/app/profile" aria-label="Mi perfil">{{ (data()?.organizationName || 'O').slice(0, 1).toUpperCase() }}</a></div>
+
+      @if (loading()) {
+        <div class="state-card" role="status"><span class="spinner"></span><strong>Cargando la información de tu organización…</strong></div>
+      } @else if (error()) {
+        <div class="state-card error-state" role="alert"><strong>No pudimos cargar el panel</strong><p>{{ error() }}</p><button type="button" class="button-primary" (click)="reload()">Intentar de nuevo</button></div>
+      } @else if (data(); as snapshot) {
+        @if (section() === 'home') {
+          <section class="welcome-banner"><div><span class="eyebrow">TU ESPACIO DE APOYO</span><h1>Bienvenida, {{ snapshot.organizationName }} <span>✦</span></h1><p>Encuentra alimentos disponibles y sigue las solicitudes de tu organización.</p></div><button type="button" class="button-primary" (click)="navigateTo('search')">⌕ Buscar donaciones</button></section>
+          @if (snapshot.verificationStatus !== 'approved') { <div class="verification-notice">Tu organización está pendiente de verificación. Puedes consultar donaciones, pero para solicitar alimentos debe estar aprobada.</div> }
+          <section class="stats-grid" aria-label="Resumen de actividad">
+            <article class="stat-card"><span class="stat-icon green-icon">⌕</span><div><small>Donaciones disponibles</small><strong>{{ snapshot.donations.length }}</strong><em>Publicaciones vigentes visibles</em></div></article>
+            <article class="stat-card"><span class="stat-icon orange-icon">◷</span><div><small>Pendientes de respuesta</small><strong>{{ pendingRequests().length }}</strong><em>Solicitudes de tu organización</em></div></article>
+            <article class="stat-card"><span class="stat-icon purple-icon">▤</span><div><small>Aceptadas o en proceso</small><strong>{{ activeRequests().length }}</strong><em>Coordinación de recogida</em></div></article>
+            <article class="stat-card"><span class="stat-icon blue-icon">♡</span><div><small>Alimentos recibidos</small><strong class="received-value">{{ receivedSummary() }}</strong><em>Entregas confirmadas este mes</em></div></article>
+          </section>
+
+          <div class="content-grid">
+            <section class="panel donation-panel"><div class="section-heading"><div><span class="eyebrow">PUBLICACIONES VIGENTES</span><h2>Donaciones disponibles</h2></div><button type="button" class="text-link" (click)="navigateTo('search')">Ver todas →</button></div>
+              @if (snapshot.donations.length) {
+                <div class="donation-grid">
+                  @for (donation of snapshot.donations.slice(0, 6); track donation.id) {
+                    <article class="donation-card"><div class="food-art"><span aria-hidden="true">{{ donation.categoryName.slice(0, 1) }}</span><small>Disponible</small></div><div class="donation-body"><small class="category">{{ donation.categoryName }}</small><h3>{{ donation.foodName }}</h3><p class="quantity-line">{{ donationQuantity(donation) }}</p><div class="donation-facts"><span>Vence {{ formatDate(donation.expiresAt) }}</span><span>{{ donation.city || 'Ubicación no indicada' }}</span></div><p class="pickup-window">Recogida: {{ formatDate(donation.pickupStartsAt) }} – {{ formatDate(donation.pickupEndsAt) }}</p><button type="button" class="outline-button" (click)="openDonation(donation)">Ver detalles y solicitar →</button></div></article>
+                  }
+                </div>
+              } @else { <div class="empty-state"><strong>No hay donaciones disponibles ahora</strong><p>Cuando se publiquen alimentos vigentes aparecerán aquí.</p><button type="button" class="outline-button" (click)="reload()">Actualizar lista</button></div> }
+            </section>
+            <aside class="panel recent-panel"><div class="section-heading"><div><span class="eyebrow">SEGUIMIENTO</span><h2>Solicitudes recientes</h2></div><button type="button" class="text-link" (click)="navigateTo('requests')">Ver todas →</button></div>
+              @for (request of recentRequests(); track request.id) { <article class="recent-request"><span class="request-dot" [class]="'request-dot status-' + request.status"></span><div><strong>{{ request.donationName }}</strong><small>{{ statusLabel(request) }} · {{ formatDate(request.requestedAt) }}</small></div></article> }
+              @empty { <div class="empty-compact">Aún no has enviado solicitudes.</div> }
+            </aside>
+          </div>
+        } @else if (section() === 'search') {
+          <section class="section-title"><span class="eyebrow">ALIMENTOS VIGENTES</span><h1>Buscar donaciones</h1><p>Consulta los alimentos disponibles que puedes solicitar.</p></section>
+          <section class="panel search-panel"><label class="search-field"><span>⌕</span><input type="search" placeholder="Busca alimentos, categorías o ciudad" [value]="query()" (input)="updateSearch($event)" /></label>
+            @if (filteredDonations().length) { <div class="donation-grid">
+              @for (donation of filteredDonations(); track donation.id) { <article class="donation-card"><div class="food-art"><span aria-hidden="true">{{ donation.categoryName.slice(0, 1) }}</span><small>Disponible</small></div><div class="donation-body"><small class="category">{{ donation.categoryName }}</small><h3>{{ donation.foodName }}</h3><p class="quantity-line">{{ donationQuantity(donation) }}</p><div class="donation-facts"><span>Vence {{ formatDate(donation.expiresAt) }}</span><span>{{ donation.city || 'Ubicación no indicada' }}</span></div><p class="pickup-window">Recogida: {{ formatDate(donation.pickupStartsAt) }} – {{ formatDate(donation.pickupEndsAt) }}</p><button type="button" class="outline-button" (click)="openDonation(donation)">Ver detalles y solicitar →</button></div></article> }
+            </div> } @else { <div class="empty-state"><strong>No hay resultados para esta búsqueda</strong><p>Prueba con otro alimento o ciudad, o vuelve más tarde.</p></div> }
+          </section>
+        } @else if (section() === 'detail') {
+          @if (selectedDonation(); as donation) {
+            <section class="section-title"><button class="back-button" type="button" (click)="goBackToDonations()">← Volver a donaciones</button><span class="eyebrow">DETALLE DE DONACIÓN</span><h1>{{ donation.foodName }}</h1><p>{{ donation.categoryName }} · Disponible</p></section>
+            <div class="detail-layout"><section class="panel detail-panel"><h2>Información del alimento</h2><dl class="detail-facts"><div><dt>Cantidad disponible</dt><dd>{{ donationQuantity(donation) }}</dd></div><div><dt>Fecha límite</dt><dd>{{ formatDate(donation.expiresAt) }}</dd></div><div><dt>Horario de recogida</dt><dd>{{ formatDate(donation.pickupStartsAt) }} – {{ formatDate(donation.pickupEndsAt) }}</dd></div><div><dt>Ciudad</dt><dd>{{ donation.city || 'No indicada' }}</dd></div></dl><p>{{ donation.description || 'El donante no añadió detalles adicionales.' }}</p><p class="privacy-note">La dirección exacta y los datos de contacto del donante no se muestran antes de que acepte tu solicitud.</p></section>
+              <section class="panel request-panel"><h2>Solicitar esta donación</h2>
+                @if (!canRequest()) { <p class="verification-notice">La organización debe estar aprobada para enviar solicitudes.</p> }
+                <label>Cantidad que necesitas<input type="number" min="0.01" [max]="donation.quantity" step="0.01" [value]="requestQuantity()" (input)="setQuantity($event)" /></label><small class="field-hint">Máximo {{ donationQuantity(donation) }}</small>
+                <label>Mensaje para el donante (opcional)<textarea maxlength="500" rows="4" placeholder="Comparte información necesaria para coordinar la solicitud." [value]="requestMessage()" (input)="setMessage($event)"></textarea></label>
+                @if (requestError()) { <p class="inline-error" role="alert">{{ requestError() }}</p> }
+                @if (requestSent()) { <p class="success-message" role="status">Solicitud enviada. Puedes seguir su estado en «Mis solicitudes».</p> }
+                <button type="button" class="button-primary full-button" [disabled]="!canRequest() || requestSending() || requestSent()" (click)="submitRequest()">{{ requestSending() ? 'Enviando…' : requestSent() ? 'Solicitud enviada' : 'Enviar solicitud' }}</button>
+              </section>
+            </div>
+          } @else { <div class="state-card"><strong>Selecciona una donación para ver sus detalles.</strong><button type="button" class="button-primary" (click)="navigateTo('search')">Buscar donaciones</button></div> }
+        } @else if (section() === 'requests') {
+          <section class="section-title"><span class="eyebrow">SEGUIMIENTO</span><h1>Mis solicitudes</h1><p>Revisa las solicitudes enviadas por tu organización.</p></section>
+          <section class="panel request-list">@for (request of snapshot.requests; track request.id) { <article class="request-row"><div><strong>{{ request.donationName }}</strong><small>{{ request.categoryName }} · {{ requestQuantityLabel(request) }}</small></div><span class="status-pill" [class]="'status-pill status-' + (request.deliveryStatus === 'delivered' ? 'delivered' : request.status)">{{ statusLabel(request) }}</span><time>{{ formatDate(request.requestedAt) }}</time>@if (request.status === 'accepted') { <p class="pickup-access">Recogida: {{ formatDate(request.pickupStartsAt) }} – {{ formatDate(request.pickupEndsAt) }} · {{ request.pickupAddress || 'Dirección aún no disponible' }}<br />{{ request.pickupCity }}</p> }</article> } @empty { <div class="empty-state"><strong>No tienes solicitudes todavía</strong><p>Explora las donaciones vigentes para enviar tu primera solicitud.</p><button type="button" class="button-primary" (click)="navigateTo('search')">Buscar donaciones</button></div> }</section>
+        } @else {
+          <section class="section-title"><span class="eyebrow">ALIMENTOS RECIBIDOS</span><h1>Historial</h1><p>Registro de las entregas confirmadas para tu organización.</p></section>
+          <section class="panel request-list">@for (request of completedRequests(); track request.id) { <article class="request-row"><div><strong>{{ request.donationName }}</strong><small>{{ request.categoryName }} · {{ requestQuantityLabel(request) }}</small></div><span class="status-pill status-delivered">Entregada</span><time>{{ formatDate(request.deliveredAt) }}</time></article> } @empty { <div class="empty-state"><strong>Aún no hay entregas confirmadas</strong><p>Cuando se confirme una entrega aparecerá en este historial.</p></div> }</section>
+        }
+      }
+    </section>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Navegación beneficiaria">
+    <button type="button" [class.active]="section() === 'home'" (click)="navigateTo('home')"><span>⌂</span><small>Inicio</small></button>
+    <button type="button" [class.active]="section() === 'search' || section() === 'detail'" (click)="navigateTo('search')"><span>⌕</span><small>Buscar</small></button>
+    <button type="button" [class.active]="section() === 'requests'" (click)="navigateTo('requests')"><span>▤</span><small>Solicitudes</small></button>
+    <button type="button" [class.active]="section() === 'history'" (click)="navigateTo('history')"><span>◷</span><small>Historial</small></button>
+  </nav>
+</main>

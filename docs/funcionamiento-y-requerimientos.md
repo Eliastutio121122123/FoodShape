@@ -42,6 +42,20 @@ Las migraciones y el código están versionados en GitHub. La ejecución remota 
 
 Este documento conserva el alcance funcional acordado y describe quÃ© partes estÃ¡n implementadas en el cÃ³digo, cuÃ¡les existen solo en la base de datos y cuÃ¡les aÃºn estÃ¡n pendientes. Una tabla o una pantalla por sÃ­ sola no significa que una funcionalidad estÃ© completa: para considerarla conectada, el flujo debe guardar y leer datos persistentes y aplicar los permisos correspondientes.
 
+## Actualización del 15 de noviembre de 2026: inicio de organización beneficiaria
+
+- La ruta existente `/app/beneficiary` ahora carga un panel propio protegido por el rol `beneficiary`; el acceso al perfil conserva la ruta existente `/app/profile`. El menú de navegación de secciones se mantiene dentro de la ruta del panel porque el proyecto no define rutas independientes para buscar, solicitudes o historial.
+- Se retiraron los accesos a los paneles de otros roles y los datos de demostración del inicio beneficiario. La pantalla consulta la organización y el perfil vinculados al usuario de Supabase autenticado, las donaciones públicas vigentes, sus solicitudes propias y notificaciones propias, respetando RLS.
+- Las tarjetas de actividad muestran publicaciones disponibles, solicitudes pendientes, solicitudes aceptadas/en proceso y cantidades entregadas este mes, agrupadas por unidad. No hay coordenadas registradas para organizaciones beneficiarias, por lo que el panel no calcula ni afirma distancias o radio de cercanía. Se muestra la ciudad de la donación cuando existe.
+- Desde las tarjetas se abre el detalle y se puede crear una solicitud real en `donation_requests` con cantidad y mensaje. La dirección de recogida solo se consulta y presenta para solicitudes aceptadas; el nombre y contacto del donante no se publican en el mercado.
+- El panel presenta estados de carga, error/reintento, listas vacías y verificación pendiente. En móvil usa una navegación inferior compacta.
+- La migración `20261115170000_beneficiary_requested_donation_read.sql` permite a una organización beneficiaria consultar publicaciones vinculadas a sus solicitudes aceptadas, para coordinar la recogida sin ampliar la lectura a solicitudes de otras organizaciones. Debe aplicarse al proyecto Supabase remoto antes de esperar la dirección después de una aceptación; este repositorio no confirma que ya se haya aplicado.
+
+### Límites conocidos
+
+- No existen rutas separadas para «Buscar donaciones», «Mis solicitudes» o «Historial»; son secciones locales del panel bajo `/app/beneficiary`. No existe ubicación de la beneficiaria para un cálculo de distancia, ni un flujo de mapa.
+- El historial solo incluye entregas cuyo estado de `deliveries` es `delivered` y tiene fecha; los alimentos recibidos se agrupan usando cantidad solicitada (o cantidad publicada si no se informó una) y unidad.
+
 ## 1. Contexto general
 
 FoodShare busca conectar organizaciones donantes que ofrecen alimentos, organizaciones beneficiarias que los solicitan, personas voluntarias que apoyan en la recogida y entrega, y administradores que revisan instituciones y supervisan la plataforma.

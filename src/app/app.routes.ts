@@ -15,6 +15,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/auth/auth.page').then((m) => m.AuthPage),
   },
   {
+    path: 'app/beneficiary',
+    canActivate: [roleGuard],
+    data: { role: 'beneficiary' },
+    loadComponent: () => import('./pages/beneficiary/beneficiary.page').then((m) => m.BeneficiaryPage),
+  },
+  {
     path: 'app/donor',
     canActivate: [roleGuard],
     data: { role: 'donor' },
