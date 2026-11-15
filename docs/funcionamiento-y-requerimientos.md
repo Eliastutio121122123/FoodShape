@@ -1,6 +1,43 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 9 de noviembre de 2026.
+**Estado revisado:** 15 de noviembre de 2026.
+
+## Actualización del 15 de noviembre de 2026: organización donante
+
+Esta actualización reemplaza las descripciones anteriores de los requerimientos 7–16 y 21–22 **para el panel de la organización donante**. El flujo del mercado y la creación de solicitudes desde el panel beneficiario siguen siendo demostrativos y se detallan en la sección 6.
+
+### Funciones del donante conectadas
+
+- **Inicio:** el dashboard consulta en Supabase las donaciones de la organización, solicitudes pendientes, entregas confirmadas, actividad reciente y métricas. Las donaciones ocultas no cuentan como disponibles para otras organizaciones.
+- **Publicar donaciones:** el formulario carga categorías activas y la dirección registrada de la organización, valida nombre, cantidad, unidad y fechas, guarda los datos en `public.donations` y permite cargar fotos al bucket `foodshare-donations`.
+- **Mis donaciones:** consulta publicaciones persistentes; incluye búsqueda, filtros por estado y ocultas, cantidades, vencimientos, foto y estado de solicitudes. Las unidades técnicas se presentan en español.
+- **Detalle y mantenimiento:** cada publicación abre una ficha con imagen, descripción, categoría, cantidad, horarios, vencimiento, dirección y solicitudes. El menú de tres puntos permite editar publicaciones disponibles sin solicitudes, ocultar o volver a mostrar una publicación y eliminarla cuando no tiene solicitudes relacionadas. El borrado conserva las restricciones de integridad; cuando hay solicitudes, se debe ocultar y conservar el registro.
+- **Solicitudes recibidas:** el panel consulta solicitudes persistentes, muestra la organización solicitante y los datos de recogida, filtra pendientes/aceptadas/finalizadas y procesa aceptar o rechazar mediante `review_donation_request`. La aceptación reserva la donación y las solicitudes pendientes restantes se rechazan de forma transaccional.
+- **Historial:** consulta entregas completadas y calcula alimentos entregados, entregas confirmadas y organizaciones apoyadas.
+- **Foto de perfil:** la barra lateral del panel donante muestra la foto guardada en el perfil; usa las iniciales como alternativa si no hay foto.
+- **Correcciones visuales:** las tarjetas mantienen visibles los datos aunque haya foto; el botón «Ver detalle» abre la ficha; el menú de tres puntos usa opciones legibles y no hereda la forma circular del botón.
+
+### Migraciones y permisos requeridos
+
+- `20261109180000_donor_request_inbox.sql`: añade cantidad y mensaje a solicitudes y la función segura para revisarlas.
+- `20261115100000_foodshare_donation_images.sql`: agrega `image_path`, bucket y políticas de imágenes.
+- `20261115120000_foodshare_donation_storage_rls_fix.sql`: corrige la comprobación de permisos para subir imágenes.
+- `20261115150000_foodshare_donor_donation_management.sql`: agrega `donations.is_visible`, limita lecturas/solicitudes de publicaciones ocultas y restringe el borrado a publicaciones sin solicitudes.
+
+Las migraciones y el código están versionados en GitHub. La ejecución remota de SQL se hizo manualmente desde Supabase; no se confirma desde este repositorio el estado actual de cada migración. El 15 de noviembre se detectaron errores por las columnas `quantity_requested` e `is_visible` ausentes; después se vio el dashboard con publicaciones y una de ellas marcada como «Oculta», lo que confirma que la columna de visibilidad estaba disponible en esa captura. Si vuelven a aparecer errores de columna, revisar que se ejecutó el archivo correspondiente en el mismo proyecto Supabase configurado para la web.
+
+### Estado pendiente relacionado
+
+- El panel de beneficiarios todavía usa `DonationService` y `DonationRequestService` con datos en memoria. Por eso, la búsqueda y creación de solicitudes desde el mercado beneficiario aún no consumen estas donaciones persistentes. La política RLS ya impide consultar publicaciones ocultas mediante Supabase; falta conectar el mercado y su flujo de solicitud a esas consultas.
+- La aceptación/rechazo del lado donante está conectada; la creación/cancelación del lado beneficiario y la coordinación completa de entregas todavía requieren integración de extremo a extremo.
+- `npx tsc -p tsconfig.app.json --noEmit` pasó. `npx ng build --configuration development --output-path .angular/codex-avatar-check` completó correctamente el 15 de noviembre. No se ejecutaron pruebas automatizadas.
+
+### Cambios publicados
+
+- `fe44e2c`: menú para editar, ocultar/mostrar y eliminar donaciones, con migración y políticas RLS.
+- `b98ee9e`: corrección visual del menú de acciones.
+- `c0fd494`: foto de perfil en la barra lateral del donante.
+- También quedaron publicados los detalles de donación (`fbdf868`) y las correcciones de tarjeta con imagen (`0af5841`). El repositorio principal actualiza el puntero del subrepositorio en cada cambio.
 
 Este documento conserva el alcance funcional acordado y describe quÃ© partes estÃ¡n implementadas en el cÃ³digo, cuÃ¡les existen solo en la base de datos y cuÃ¡les aÃºn estÃ¡n pendientes. Una tabla o una pantalla por sÃ­ sola no significa que una funcionalidad estÃ© completa: para considerarla conectada, el flujo debe guardar y leer datos persistentes y aplicar los permisos correspondientes.
 
