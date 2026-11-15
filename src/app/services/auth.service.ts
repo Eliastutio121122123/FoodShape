@@ -783,7 +783,9 @@ export class AuthService {
         const { error: uploadError } = await this.supabase.storage.from('foodshare-donations').upload(imagePath, input.image, {
           cacheControl: '3600', upsert: false, contentType: input.image.type,
         });
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          throw new Error(`No se pudo subir la imagen a Supabase Storage: ${uploadError.message}. Verifica que la migración de imágenes esté aplicada en este proyecto.`);
+        }
       }
 
       const { data: donation, error: insertError } = await this.supabase.from('donations').insert({
@@ -806,7 +808,7 @@ export class AuthService {
           const { error: removeError } = await this.supabase.storage.from('foodshare-donations').remove([imagePath]);
           if (removeError) console.warn('No se pudo limpiar la imagen de una donación que no se guardó.', removeError);
         }
-        throw insertError;
+        throw new Error(`La imagen se subió, pero no se pudo guardar la donación: ${insertError.message}`);
       }
       return donation.id as string;
     })());
