@@ -30,6 +30,7 @@ export class DonorPage {
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   readonly session = this.auth.session;
+  readonly avatarUrl = this.auth.currentAvatarUrl;
   readonly dashboard = signal<DonorDashboardSnapshot | null>(null);
   readonly dashboardLoading = signal(false);
   readonly dashboardError = signal('');
