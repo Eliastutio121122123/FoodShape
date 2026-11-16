@@ -2,6 +2,12 @@
 
 **Estado revisado:** 15 de noviembre de 2026.
 
+## Perfil beneficiario visible desde solicitudes del donante
+
+- La expansión «Ver perfil» ahora presenta nombre institucional, estado de verificación, tipo de institución, representante, ciudad y teléfono. La dirección se muestra solo después de aceptar la solicitud.
+- El servicio identifica explícitamente si Supabase devolvió el perfil; si no, la interfaz explica que falta acceso en vez de mostrar un panel vacío.
+- La nueva migración `supabase/migrations/20261115230000_donor_beneficiary_profile_access.sql` asegura que una organización donante pueda leer la organización beneficiaria vinculada a solicitudes de sus propias donaciones. No amplía el acceso a instituciones sin relación con sus donaciones. Debe aplicarse al Supabase remoto.
+
 ## Imágenes de donaciones en el panel beneficiario
 
 - La consulta de publicaciones vigentes del panel beneficiario ahora incluye `donations.image_path` y genera la URL pública desde el bucket `foodshare-donations`, igual que el panel donante.

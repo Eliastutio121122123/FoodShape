@@ -134,6 +134,8 @@ export interface DonorRequestInboxItem {
   beneficiaryName: string;
   beneficiaryType: string | null;
   beneficiaryCity: string;
+  beneficiaryRepresentative: string;
+  beneficiaryProfileAvailable: boolean;
   beneficiaryAddress: string;
   beneficiaryPhone: string;
   beneficiaryVerified: boolean;
@@ -1261,7 +1263,7 @@ export class AuthService {
       const beneficiaryIds = [...new Set(requests.map((request) => request.beneficiary_organization_id))];
       const requestIds = requests.map((request) => request.id);
       const [beneficiariesResult, deliveriesResult] = await Promise.all([
-        this.supabase.from('organizations').select('id, name, profile_type, city, phone, verification_status').in('id', beneficiaryIds),
+        this.supabase.from('organizations').select('id, name, profile_type, city, phone, representative_name, verification_status').in('id', beneficiaryIds),
         this.supabase.from('deliveries').select('id, request_id, status, delivered_at, received_confirmed_at, received_confirmed_by').in('request_id', requestIds),
       ]);
       if (beneficiariesResult.error) throw beneficiariesResult.error;
@@ -1294,6 +1296,7 @@ export class AuthService {
           beneficiaryId: request.beneficiary_organization_id,
           beneficiaryName: beneficiary?.name ?? 'Organización beneficiaria',
           beneficiaryType: beneficiary?.profile_type ?? null, beneficiaryCity: beneficiary?.city ?? '',
+          beneficiaryRepresentative: beneficiary?.representative_name ?? '', beneficiaryProfileAvailable: Boolean(beneficiary),
           beneficiaryPhone: beneficiary?.phone ?? '', beneficiaryVerified: beneficiary?.verification_status === 'approved',
           beneficiaryAddress: request.status === 'accepted' ? acceptedAddressByBeneficiaryId.get(request.beneficiary_organization_id) ?? '' : '',
           pickupAddress: donation.address, pickupCity: donation.city,
