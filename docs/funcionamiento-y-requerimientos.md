@@ -2,6 +2,8 @@
 
 **Estado revisado:** 15 de noviembre de 2026.
 
+> **Para qué sirve este documento:** es el inventario funcional y la guía de seguimiento de FoodShare. Reúne las 30 funcionalidades acordadas, explica qué está implementado y qué falta, y registra las validaciones pendientes en Supabase. Actualízalo cuando cambie el sistema para que el equipo tenga una referencia compartida y no confunda pantallas, maquetas o tablas con funciones terminadas.
+
 ## Resumen de cambios recientes: donantes y beneficiarias
 
 Esta sección reúne las funciones incorporadas recientemente y reemplaza las descripciones anteriores que indicaban que todo el flujo de donaciones era de demostración.
@@ -140,11 +142,21 @@ La conectividad HTTP y CORS se comprobo parcialmente desde el entorno local. El 
 
 ## 3. Requerimientos funcionales y estado
 
+> **Inventario funcional:** la siguiente lista es la referencia oficial de alcance y avance de las 30 funcionalidades de FoodShare.
+
+### Resumen de las 30 funcionalidades
+
+- **Completadas y verificadas de extremo a extremo:** 0 de 30. Ninguna se marca como completa hasta comprobar también permisos, persistencia y comportamiento en el proyecto Supabase remoto.
+- **Parciales:** 1–16, 18–19, 21–25 y 28–30. Varias ya funcionan en el código —por ejemplo, publicar y buscar donaciones, enviar/revisar solicitudes y confirmar recepción—, pero aún tienen tareas o validaciones remotas descritas en las filas.
+- **Pendientes:** 17 (asignación de voluntarios), 20 (notificaciones persistentes por eventos), 26 (puntuación/reputación) y 27 (incidencias/reportes).
+
+“Parcial” no significa que no se haya trabajado: la columna de situación detalla lo implementado y lo que falta. La falta de validación de una migración remota se señala expresamente, sin asumir que la base desplegada tenga el mismo estado que el código.
+
 Estados usados:
 
-- **Implementado:** el flujo principal tiene conexiÃ³n persistente y permisos configurados.
-- **Parcial:** existe una parte en la interfaz, servicios, esquema o polÃ­ticas, pero falta completar o verificar el flujo integral.
-- **Pendiente:** funciona con datos demostrativos o no estÃ¡ desarrollado/conectado a Supabase.
+- **Implementado:** flujo completo conectado, con permisos configurados y comportamiento comprobado de extremo a extremo en el entorno correspondiente.
+- **Parcial:** existe funcionalidad real en código, pero falta completar alguna acción, rol, persistencia, permiso o validación del entorno remoto.
+- **Pendiente:** la función principal aún no está disponible de extremo a extremo; puede existir una tabla, maqueta o servicio local, pero eso no cuenta como función terminada.
 
 ### 3.1 Cuentas, perfiles y permisos
 
