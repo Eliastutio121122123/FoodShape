@@ -20,6 +20,7 @@ export class BeneficiaryPage {
   readonly selectedCategory = signal('Todas');
   readonly sortMode = signal<'recent' | 'expiry' | 'quantity'>('recent');
   readonly notificationsOpen = signal(false);
+  readonly failedDonationImages = signal<ReadonlySet<string>>(new Set());
   readonly selectedDonation = signal<BeneficiaryDonation | null>(null);
   readonly requestQuantity = signal(1);
   readonly requestMessage = signal('');
@@ -153,6 +154,9 @@ export class BeneficiaryPage {
   }
 
   toggleNotifications(): void { this.notificationsOpen.update((open) => !open); }
+  handleDonationImageError(donationId: string): void {
+    this.failedDonationImages.update((current) => new Set(current).add(donationId));
+  }
   donationQuantity(donation: BeneficiaryDonation): string { return `${this.formatNumber(donation.quantity)} ${this.unitLabel(donation.unit)}`; }
   requestQuantityLabel(request: BeneficiaryRequest): string {
     const quantity = request.requestedQuantity ?? request.donationQuantity;

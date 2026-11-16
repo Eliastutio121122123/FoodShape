@@ -162,6 +162,7 @@ export interface BeneficiaryDonation {
   createdAt: string;
   foodName: string;
   categoryName: string;
+  imageUrl: string | null;
   quantity: number;
   unit: string;
   expiresAt: string;
@@ -687,7 +688,7 @@ export class AuthService {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const [donationsResult, requestResult, notificationResult] = await Promise.all([
         this.supabase.from('donations')
-          .select('id, food_name, quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, city, notes, created_at, food_categories(name)')
+          .select('id, food_name, quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, city, notes, created_at, image_path, food_categories(name)')
           .eq('status', 'available').eq('is_visible', true).gt('expires_at', now.toISOString())
           .order('created_at', { ascending: false }),
         this.supabase.from('donation_requests')
@@ -704,6 +705,7 @@ export class AuthService {
       const categoryName = (relation: CategoryRelation): string => Array.isArray(relation) ? relation[0]?.name ?? 'Otros' : relation?.name ?? 'Otros';
       const donations: BeneficiaryDonation[] = (donationsResult.data ?? []).map((row) => ({
         id: row.id, createdAt: row.created_at, foodName: row.food_name, categoryName: categoryName(row.food_categories as CategoryRelation),
+        imageUrl: row.image_path ? this.supabase.storage.from('foodshare-donations').getPublicUrl(row.image_path).data.publicUrl : null,
         quantity: Number(row.quantity), unit: row.unit, expiresAt: row.expires_at,
         pickupStartsAt: row.pickup_starts_at, pickupEndsAt: row.pickup_ends_at, city: row.city,
         description: row.notes,

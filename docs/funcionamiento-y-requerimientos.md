@@ -2,6 +2,12 @@
 
 **Estado revisado:** 15 de noviembre de 2026.
 
+## Imágenes de donaciones en el panel beneficiario
+
+- La consulta de publicaciones vigentes del panel beneficiario ahora incluye `donations.image_path` y genera la URL pública desde el bucket `foodshare-donations`, igual que el panel donante.
+- Las tarjetas de Inicio y Buscar donaciones, así como el detalle, renderizan la foto; si no existe o falla la carga, conservan el marcador de categoría como alternativa.
+- Se reutiliza la política de lectura pública existente del bucket. No se añadió migración; la columna `image_path`, el bucket y sus permisos ya pertenecen a la migración de imágenes de donaciones.
+
 ## Corrección de carga de identidad del perfil
 
 - `loadAccountProfile()` limita la consulta institucional al propietario autenticado y al tipo de organización que corresponde al rol del perfil; los datos de voluntariado se consultan por el UID autenticado.
