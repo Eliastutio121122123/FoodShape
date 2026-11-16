@@ -49,6 +49,12 @@ export class DonorPage {
   readonly requestActionError = signal('');
   readonly requestActionMessage = signal('');
   readonly reviewingRequestId = signal<string | null>(null);
+  readonly renewingRequestId = signal<string | null>(null);
+  readonly renewalFormRequestId = signal<string | null>(null);
+  readonly renewalStartsAt = signal(localDateTimeAfter(1));
+  readonly renewalEndsAt = signal(localDateTimeAfter(4));
+  readonly renewalFoodSafeConfirmed = signal(false);
+  readonly renewalError = signal('');
   readonly requestStatusFilter = signal<RequestStatusFilter>('pending');
   readonly expandedRequestProfile = signal<string | null>(null);
   readonly history = signal<DonorHistorySnapshot | null>(null);
@@ -370,7 +376,54 @@ export class DonorPage {
   }
 
   canAcceptRequest(request: DonorRequestInboxItem): boolean {
-    return request.status === 'pending' && request.donationStatus === 'available' && Date.parse(request.expiresAt) > Date.now();
+    return request.status === 'pending' && request.donationStatus === 'available'
+      && Date.parse(request.expiresAt) > Date.now()
+      && (request.quantityRequested === null || request.quantityRequested <= request.donationQuantity);
+  }
+
+  requestUnavailableReason(request: DonorRequestInboxItem): string {
+    if (request.donationStatus !== 'available') return 'La donación ya está reservada, finalizada o cancelada.';
+    const expiresAt = Date.parse(request.expiresAt);
+    if (!Number.isFinite(expiresAt)) return 'La donación no tiene una fecha límite válida.';
+    if (expiresAt <= Date.now()) return `La oferta venció el ${this.requestReceiptDate(request.expiresAt)}.`;
+    if (request.quantityRequested !== null && request.quantityRequested > request.donationQuantity) return 'La cantidad solicitada supera lo disponible.';
+    return 'La donación ya no está disponible para reservar.';
+  }
+
+  canRenewRequest(request: DonorRequestInboxItem): boolean {
+    return request.status === 'pending' && request.donationStatus === 'available'
+      && Number.isFinite(Date.parse(request.expiresAt)) && Date.parse(request.expiresAt) <= Date.now();
+  }
+
+  openRenewalForm(request: DonorRequestInboxItem): void {
+    if (!this.canRenewRequest(request)) return;
+    this.renewalFormRequestId.set(request.id);
+    this.renewalStartsAt.set(localDateTimeAfter(1));
+    this.renewalEndsAt.set(localDateTimeAfter(4));
+    this.renewalFoodSafeConfirmed.set(false);
+    this.renewalError.set('');
+  }
+
+  setRenewalStartsAt(event: Event): void { this.renewalStartsAt.set((event.target as HTMLInputElement).value); }
+  setRenewalEndsAt(event: Event): void { this.renewalEndsAt.set((event.target as HTMLInputElement).value); }
+  setRenewalFoodSafeConfirmed(event: Event): void { this.renewalFoodSafeConfirmed.set((event.target as HTMLInputElement).checked); }
+
+  renewRequestDonation(request: DonorRequestInboxItem): void {
+    if (!this.canRenewRequest(request) || this.renewingRequestId()) return;
+    this.renewingRequestId.set(request.id);
+    this.renewalError.set('');
+    this.auth.renewDonorDonationAvailability(request.donationId, this.renewalStartsAt(), this.renewalEndsAt(), this.renewalFoodSafeConfirmed()).subscribe({
+      next: () => {
+        this.renewingRequestId.set(null);
+        this.renewalFormRequestId.set(null);
+        this.requestActionMessage.set('Horario actualizado. La donación sigue apta y ahora puedes aceptar o rechazar la solicitud.');
+        this.loadRequests();
+      },
+      error: (error: Error) => {
+        this.renewingRequestId.set(null);
+        this.renewalError.set(error.message || 'No se pudo actualizar la vigencia.');
+      },
+    });
   }
 
   reviewRequest(request: DonorRequestInboxItem, decision: 'accepted' | 'rejected'): void {

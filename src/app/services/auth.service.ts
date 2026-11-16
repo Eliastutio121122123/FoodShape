@@ -1317,6 +1317,23 @@ export class AuthService {
     })());
   }
 
+  renewDonorDonationAvailability(donationId: string, pickupStartsAt: string, pickupEndsAt: string, foodSafeConfirmed: boolean): Observable<void> {
+    return from((async () => {
+      if (!foodSafeConfirmed) throw new Error('Confirma que el alimento sigue apto para consumo antes de renovar la oferta.');
+      const start = Date.parse(pickupStartsAt);
+      const end = Date.parse(pickupEndsAt);
+      if (!Number.isFinite(start) || start <= Date.now()) throw new Error('El nuevo inicio de recogida debe estar en el futuro.');
+      if (!Number.isFinite(end) || end <= start) throw new Error('El fin de recogida debe ser posterior al inicio.');
+      const { error } = await this.supabase.rpc('renew_donor_donation_availability', {
+        p_donation_id: donationId,
+        p_pickup_starts_at: new Date(start).toISOString(),
+        p_pickup_ends_at: new Date(end).toISOString(),
+        p_food_safe_confirmed: foodSafeConfirmed,
+      });
+      if (error) throw new Error(error.message || 'No se pudo actualizar la vigencia de la donación.');
+    })());
+  }
+
   loadDonorHistory(): Observable<DonorHistorySnapshot> {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();

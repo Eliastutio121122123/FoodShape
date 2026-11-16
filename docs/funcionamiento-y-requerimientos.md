@@ -8,6 +8,13 @@
 - El servicio identifica explícitamente si Supabase devolvió el perfil; si no, la interfaz explica que falta acceso en vez de mostrar un panel vacío.
 - La nueva migración `supabase/migrations/20261115230000_donor_beneficiary_profile_access.sql` asegura que una organización donante pueda leer la organización beneficiaria vinculada a solicitudes de sus propias donaciones. No amplía el acceso a instituciones sin relación con sus donaciones. Debe aplicarse al Supabase remoto.
 
+## Renovación de una oferta vencida con solicitudes pendientes
+
+- La aceptación permanece bloqueada cuando la donación está vencida o ya no está disponible. La vista ahora indica el motivo concreto y la fecha límite.
+- Para una oferta vencida que aún está `available` y tiene solicitudes pendientes sin ninguna aceptada, el donante puede cambiar solamente el horario/fecha límite. La acción exige confirmar que el alimento sigue apto para consumo.
+- La migración `supabase/migrations/20261115233000_renew_expired_donor_donation.sql` limita la renovación al donante propietario, organización activa y aprobada, horario futuro y solicitudes pendientes; luego actualiza `pickup_starts_at`, `pickup_ends_at` y `expires_at` atómicamente. Debe aplicarse a Supabase remoto.
+- Una vez renovada la vigencia, se actualizan las solicitudes y el donante puede aceptar normalmente. La RPC de aceptación sigue rechazando donaciones vencidas.
+
 ## Imágenes de donaciones en el panel beneficiario
 
 - La consulta de publicaciones vigentes del panel beneficiario ahora incluye `donations.image_path` y genera la URL pública desde el bucket `foodshare-donations`, igual que el panel donante.
