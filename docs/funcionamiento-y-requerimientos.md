@@ -2,6 +2,27 @@
 
 **Estado revisado:** 15 de noviembre de 2026.
 
+## Resumen de cambios recientes: donantes y beneficiarias
+
+Esta sección reúne las funciones incorporadas recientemente y reemplaza las descripciones anteriores que indicaban que todo el flujo de donaciones era de demostración.
+
+- **Publicación y gestión del donante:** el panel consulta y publica donaciones persistentes, carga imágenes en `foodshare-donations`, ofrece detalle y acciones para editar, ocultar/mostrar y eliminar cuando las relaciones lo permiten. Las consultas respetan `donations.is_visible`.
+- **Mercado beneficiario conectado:** Inicio y Buscar donaciones usan la sesión de Supabase para identificar la organización beneficiaria, consultan publicaciones disponibles y visibles, muestran nombre, categoría, cantidad, unidad, vencimiento, ubicación disponible y foto, y permiten enviar solicitudes persistentes con cantidad y mensaje. No se inventan donaciones ni distancias.
+- **Seguimiento de solicitudes:** el beneficiario puede consultar sus solicitudes y el donante las solicitudes recibidas; la aceptación queda asociada a una entrega y permanece visible en ambas vistas. El perfil de la organización solicitante puede consultarse desde la solicitud, con información de contacto limitada según el estado.
+- **Coordinación y recepción:** las vistas muestran estado y pasos siguientes, dirección/ruta solo cuando los datos y permisos lo permiten, y el beneficiario puede confirmar la recepción. La confirmación se registra una sola vez y se refleja en el historial y en el panel del donante.
+- **Identidad entre cuentas:** la carga de perfiles filtra por usuario autenticado y rol, limpia datos anteriores y descarta respuestas tardías; así evita mostrar información de otra cuenta al cambiar de sesión.
+- **Interfaz:** el Inicio beneficiario y la búsqueda tienen estados de carga, error/reintento y listas vacías; navegación adaptable, tarjetas con imágenes, filtros acomodables y desplazamiento vertical en pantallas pequeñas.
+- **Rutas actuales:** el panel beneficiario vive en `/app/beneficiary`; Buscar donaciones, Mis solicitudes e Historial son secciones locales del panel. El perfil personal usa `/app/profile`.
+- **Migraciones nuevas relacionadas:** `20261115170000_beneficiary_requested_donation_read.sql`, `20261115200000_beneficiary_delivery_confirmation.sql`, `20261115230000_donor_beneficiary_profile_access.sql` y `20261115233000_renew_expired_donor_donation.sql`. Deben estar aplicadas en el proyecto Supabase que usa la aplicación; este documento no afirma que el estado remoto se haya verificado.
+
+### Límites que siguen vigentes
+
+- No hay GPS ni seguimiento de ubicación en vivo. Un enlace de mapas, cuando puede construirse, muestra una ruta estimada.
+- No hay coordenadas registradas para todas las organizaciones; sin ellas se usan direcciones disponibles y no se calculan distancias ficticias.
+- La asignación y el seguimiento operativo de voluntarios todavía no están integrados de extremo a extremo con este flujo.
+- La cancelación de solicitudes por parte del beneficiario no está implementada en el mercado conectado.
+- Las migraciones nuevas requieren aplicación y validación en Supabase remoto antes de dar por comprobados los permisos y transiciones allí.
+
 ## Perfil beneficiario visible desde solicitudes del donante
 
 - La expansión «Ver perfil» ahora presenta nombre institucional, estado de verificación, tipo de institución, representante, ciudad y teléfono. La dirección se muestra solo después de aceptar la solicitud.
@@ -30,7 +51,7 @@
 
 ## Actualización del 15 de noviembre de 2026: organización donante
 
-Esta actualización reemplaza las descripciones anteriores de los requerimientos 7–16 y 21–22 **para el panel de la organización donante**. El flujo del mercado y la creación de solicitudes desde el panel beneficiario siguen siendo demostrativos y se detallan en la sección 6.
+Esta actualización describe las funciones del panel donante; el mercado y el envío de solicitudes beneficiarias también se conectaron posteriormente y se resumen arriba y en las secciones de beneficiaria y coordinación.
 
 ### Funciones del donante conectadas
 
@@ -38,7 +59,7 @@ Esta actualización reemplaza las descripciones anteriores de los requerimientos
 - **Publicar donaciones:** el formulario carga categorías activas y la dirección registrada de la organización, valida nombre, cantidad, unidad y fechas, guarda los datos en `public.donations` y permite cargar fotos al bucket `foodshare-donations`.
 - **Mis donaciones:** consulta publicaciones persistentes; incluye búsqueda, filtros por estado y ocultas, cantidades, vencimientos, foto y estado de solicitudes. Las unidades técnicas se presentan en español.
 - **Detalle y mantenimiento:** cada publicación abre una ficha con imagen, descripción, categoría, cantidad, horarios, vencimiento, dirección y solicitudes. El menú de tres puntos permite editar publicaciones disponibles sin solicitudes, ocultar o volver a mostrar una publicación y eliminarla cuando no tiene solicitudes relacionadas. El borrado conserva las restricciones de integridad; cuando hay solicitudes, se debe ocultar y conservar el registro.
-- **Solicitudes recibidas:** el panel consulta solicitudes persistentes, muestra la organización solicitante y los datos de recogida, filtra pendientes/aceptadas/finalizadas y procesa aceptar o rechazar mediante `review_donation_request`. La aceptación reserva la donación y las solicitudes pendientes restantes se rechazan de forma transaccional.
+- **Solicitudes recibidas:** el panel consulta solicitudes persistentes, muestra la organización solicitante y los datos autorizados de recogida, filtra pendientes/aceptadas/finalizadas y procesa aceptar o rechazar mediante `review_donation_request`. La aceptación reserva la donación, rechaza las solicitudes pendientes restantes de forma transaccional y crea la entrega asociada.
 - **Historial:** consulta entregas completadas y calcula alimentos entregados, entregas confirmadas y organizaciones apoyadas.
 - **Foto de perfil:** la barra lateral del panel donante muestra la foto guardada en el perfil; usa las iniciales como alternativa si no hay foto.
 - **Correcciones visuales:** las tarjetas mantienen visibles los datos aunque haya foto; el botón «Ver detalle» abre la ficha; el menú de tres puntos usa opciones legibles y no hereda la forma circular del botón.
@@ -50,13 +71,17 @@ Esta actualización reemplaza las descripciones anteriores de los requerimientos
 - `20261115100000_foodshare_donation_images.sql`: agrega `image_path`, bucket y políticas de imágenes.
 - `20261115120000_foodshare_donation_storage_rls_fix.sql`: corrige la comprobación de permisos para subir imágenes.
 - `20261115150000_foodshare_donor_donation_management.sql`: agrega `donations.is_visible`, limita lecturas/solicitudes de publicaciones ocultas y restringe el borrado a publicaciones sin solicitudes.
+- `20261115170000_beneficiary_requested_donation_read.sql`: permite que la beneficiaria consulte la publicación asociada a sus solicitudes aceptadas para coordinar la recogida.
+- `20261115200000_beneficiary_delivery_confirmation.sql`: crea/actualiza el flujo seguro de entregas y la confirmación de recepción por la organización beneficiaria.
+- `20261115230000_donor_beneficiary_profile_access.sql`: permite consultar al donante el perfil de la beneficiaria vinculada a solicitudes de sus propias donaciones.
+- `20261115233000_renew_expired_donor_donation.sql`: RPC para renovar de forma limitada una oferta vencida con solicitudes pendientes.
 
 Las migraciones y el código están versionados en GitHub. La ejecución remota de SQL se hizo manualmente desde Supabase; no se confirma desde este repositorio el estado actual de cada migración. El 15 de noviembre se detectaron errores por las columnas `quantity_requested` e `is_visible` ausentes; después se vio el dashboard con publicaciones y una de ellas marcada como «Oculta», lo que confirma que la columna de visibilidad estaba disponible en esa captura. Si vuelven a aparecer errores de columna, revisar que se ejecutó el archivo correspondiente en el mismo proyecto Supabase configurado para la web.
 
 ### Estado pendiente relacionado
 
-- El panel de beneficiarios todavía usa `DonationService` y `DonationRequestService` con datos en memoria. Por eso, la búsqueda y creación de solicitudes desde el mercado beneficiario aún no consumen estas donaciones persistentes. La política RLS ya impide consultar publicaciones ocultas mediante Supabase; falta conectar el mercado y su flujo de solicitud a esas consultas.
-- La aceptación/rechazo del lado donante y la confirmación final por la beneficiaria están conectadas; la creación/cancelación de solicitudes desde el mercado beneficiario todavía requiere integración adicional.
+- Las pantallas genéricas basadas en `InMemoryCrudService` y las operaciones de voluntariado siguen usando datos locales; no confundirlas con el flujo dedicado de donaciones y solicitudes ya conectado.
+- La creación, aceptación/rechazo y confirmación de recepción están conectadas. La cancelación de solicitudes por la beneficiaria y la asignación/seguimiento de voluntarios siguen pendientes.
 - `npx tsc -p tsconfig.app.json --noEmit` pasó. `npx ng build --configuration development --output-path .angular/codex-avatar-check` completó correctamente el 15 de noviembre. No se ejecutaron pruebas automatizadas.
 
 ### Cambios publicados
@@ -143,37 +168,37 @@ Estados usados:
 
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
-| 7 | PublicaciÃ³n de donaciones | Pendiente | La tabla `donations` existe en la migraciÃ³n, pero `DonationService` usa datos en memoria. |
-| 8 | EdiciÃ³n y cancelaciÃ³n de donaciones | Pendiente | La cancelaciÃ³n y los cambios de estado actuales se realizan sobre datos en memoria; falta persistirlos. |
-| 9 | Informacion y categorias de alimentos | Parcial | El panel permite consultar, agregar y activar/desactivar categorias en `food_categories`. Falta aplicar la migracion remota y conectar el selector del formulario de donaciones, que aun es demostrativo. |
-| 10 | Consulta de donaciones disponibles | Pendiente | La pantalla consulta el servicio en memoria, no la tabla remota. |
-| 11 | BÃºsqueda y filtrado de donaciones | Parcial | La interfaz permite buscar y filtrar por categorÃ­a sobre datos demostrativos. Faltan consulta persistente y filtros completos por ubicaciÃ³n y fecha. |
-| 12 | GestiÃ³n de disponibilidad | Pendiente | Hay estados y polÃ­ticas en la base y cambios en el servicio en memoria; falta conectar las transiciones a PostgreSQL. |
+| 7 | PublicaciÃ³n de donaciones | Parcial | El formulario del donante guarda en `donations` y Storage con datos de la organizaciÃ³n autenticada. La disponibilidad y permisos dependen de las migraciones RLS aplicadas en el proyecto remoto. |
+| 8 | EdiciÃ³n y cancelaciÃ³n de donaciones | Parcial | Se pueden editar ofertas elegibles, ocultar/mostrar y eliminar si no tienen solicitudes relacionadas. La cancelaciÃ³n con relaciones se gestiona conservando/ocultando el registro; no hay borrado en cascada. |
+| 9 | Informacion y categorias de alimentos | Parcial | CategorÃ­as administrativas consultan `food_categories` y el formulario conectado carga las activas. Confirmar que el catÃ¡logo y sus polÃ­ticas estÃ©n aplicados en remoto. |
+| 10 | Consulta de donaciones disponibles | Parcial | El mercado beneficiario y el panel donante leen publicaciones persistentes; se filtran las ocultas y las que no estÃ¡n disponibles. |
+| 11 | BÃºsqueda y filtrado de donaciones | Parcial | La bÃºsqueda y categorÃ­as operan sobre publicaciones reales; el mercado admite ordenamiento por fecha, vencimiento y cantidad. No hay cÃ¡lculo de distancia ni filtrado geogrÃ¡fico completo. |
+| 12 | GestiÃ³n de disponibilidad | Parcial | La disponibilidad y visibilidad se guardan en Supabase y se coordinan con solicitudes aceptadas. Revisar las polÃ­ticas y migraciones remotas para validar el entorno desplegado. |
 
 ### 3.4 Solicitudes y reservas
 
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
-| 13 | Solicitud de donaciones | Pendiente | La pantalla crea solicitudes de ejemplo mediante `DonationRequestService`, que almacena datos en memoria. |
-| 14 | AceptaciÃ³n, rechazo y cancelaciÃ³n de solicitudes | Pendiente | Los mÃ©todos actuales operan en memoria. La revisiÃ³n persistente implementada es la de solicitudes de instituciones, no la de solicitudes de donaciÃ³n. |
-| 15 | Reserva de donaciones | Pendiente | La relaciÃ³n y los estados estÃ¡n definidos en el esquema, pero la reserva de la app no estÃ¡ conectada a Supabase. |
-| 16 | GestiÃ³n de estados de donaciones y solicitudes | Pendiente | Hay modelos y transiciones de ejemplo; hace falta persistirlas y asegurar consistencia entre tablas. |
+| 13 | Solicitud de donaciones | Parcial | La beneficiaria autenticada crea solicitudes persistentes con cantidad y mensaje; la cancelaciÃ³n por la beneficiaria sigue pendiente. |
+| 14 | AceptaciÃ³n, rechazo y cancelaciÃ³n de solicitudes | Parcial | El donante acepta o rechaza mediante RPC segura. La cancelaciÃ³n por la beneficiaria aÃºn no estÃ¡ integrada. |
+| 15 | Reserva de donaciones | Parcial | La aceptaciÃ³n reserva la donaciÃ³n transaccionalmente, rechaza otras solicitudes pendientes y crea la entrega correspondiente. |
+| 16 | GestiÃ³n de estados de donaciones y solicitudes | Parcial | Solicitudes y entregas persistentes reflejan aceptaciÃ³n y recepciÃ³n; validar migraciones RLS/RPC remotas y mantener los estados consistentes. |
 
 ### 3.5 Recogida y entrega
     
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
 | 17 | AsignaciÃ³n de voluntarios | Pendiente | `DeliveryService` asigna sobre datos en memoria. La tabla remota estÃ¡ definida, pero la asignaciÃ³n no estÃ¡ conectada. |
-| 18 | Fechas y horarios de recogida y entrega | Parcial | El esquema contempla vencimiento y horarios de recogida. Falta completar el flujo persistente y su interfaz de entregas. |
-| 19 | GestiÃ³n de recogida y entrega | Pendiente | El servicio modela estados localmente; los cambios no quedan guardados en Supabase. |
-| 22 | Registro y consulta de entregas realizadas | Pendiente | Existe la tabla `deliveries`, pero las pantallas/servicios aÃºn no la consultan ni actualizan. |
+| 18 | Fechas y horarios de recogida y entrega | Parcial | Se muestran los horarios persistidos de recogida y se ofrece una ruta estimada cuando hay direcciones; faltan asignaciÃ³n y operaciones del voluntario. |
+| 19 | GestiÃ³n de recogida y entrega | Parcial | La aceptaciÃ³n crea la entrega y la beneficiaria confirma la recepciÃ³n mediante RPC segura. AsignaciÃ³n y cambios de estado por voluntarios no estÃ¡n conectados de extremo a extremo. |
+| 22 | Registro y consulta de entregas realizadas | Parcial | Donante y beneficiaria consultan entregas y confirmaciones en sus paneles/historial. El mÃ³dulo genÃ©rico de entregas/asignaciones de voluntarios sigue siendo local. |
 
 ### 3.6 Notificaciones, historial e incidencias
 
 | # | Requerimiento | Estado | SituaciÃ³n actual |
 |---|---|---|---|
 | 20 | Notificaciones a usuarios | Pendiente | Hay tabla y un servicio en memoria; faltan persistencia y generaciÃ³n de notificaciones por eventos. |
-| 21 | Historial de donaciones y solicitudes | Pendiente | Las vistas muestran informaciÃ³n de ejemplo; no hay historial persistente conectado. |
+| 21 | Historial de donaciones y solicitudes | Parcial | El historial del donante y las entregas recibidas de la beneficiaria consultan los registros persistentes disponibles; otras vistas genÃ©ricas pueden seguir usando memoria. |
 | 27 | GestiÃ³n de incidencias o reportes | Pendiente | La tabla `incidents` estÃ¡ definida; faltan formularios, consultas y gestiÃ³n desde la aplicaciÃ³n. |
 
 ### 3.7 AdministraciÃ³n, reportes y plataforma
@@ -213,7 +238,7 @@ El panel de administracion permite consultar, agregar y activar/desactivar categ
 
 La migracion `supabase/migrations/20261025000000_foodshare_admin_catalogs.sql` agrega la tabla de tipos de organizacion, opciones iniciales y politicas RLS de administracion. Debe aplicarse al proyecto remoto antes de usar la gestion. Si Supabase CLI esta instalada y el proyecto vinculado, ejecuta `supabase db push` desde `foodshape`; alternativamente, pega el contenido del archivo en Supabase Dashboard > SQL Editor y ejecutalo. No se confirmo su aplicacion remota en esta revision.
 
-El formulario para publicar donaciones todavia es demostrativo y conserva opciones estaticas. Su selector se conectara al catalogo cuando se implemente la publicacion persistente.
+El formulario del donante carga las categorÃ­as activas y guarda las publicaciones en Supabase. Si el catÃ¡logo no estÃ¡ disponible o falta su migraciÃ³n remota, se debe corregir el esquema/permisos en lugar de asumir opciones de ejemplo como datos reales.
 
 ## 6. Datos demostrativos
 
@@ -224,16 +249,16 @@ Los servicios siguientes heredan de `InMemoryCrudService` y no persisten datos e
 - Entregas y asignaciones de voluntarios.
 - Organizaciones, usuarios, voluntariado y notificaciones a traves de los servicios CRUD genericos, que aun usan memoria. Las pantallas administrativas de usuarios e instituciones y los catalogos no usan esos servicios: consultan Supabase directamente.
 
-Las pantallas de donantes, beneficiarios y voluntariado aun muestran ejemplos. Sus operaciones de negocio no quedan guardadas entre sesiones. El dashboard y los reportes administrativos consultan datos de Supabase, aunque sus resultados dependen de que existan registros reales y permisos adecuados.
+El flujo dedicado de donaciones del donante y de bÃºsqueda/solicitudes/recepciÃ³n de la beneficiaria consulta y actualiza Supabase. Las operaciones genÃ©ricas que heredan de `InMemoryCrudService`, incluidas asignaciones y seguimiento de voluntarios, siguen siendo locales. El contenido de los paneles conectados depende de datos reales y de que las polÃ­ticas y migraciones requeridas estÃ©n aplicadas en el proyecto Supabase correcto.
 
 ## 7. Proximos pasos recomendados
 
 1. **Verificar el acceso de organizaciones aprobadas:** aplicar `supabase/migrations/20261104120000_confirm_organization_email_on_approval.sql` al proyecto remoto. Luego consultar `profiles.status`, `organizations.verification_status`, `organizations.status` y `auth.users.email_confirmed_at` para la cuenta afectada. Se espera `active`, `approved`, `active` y una fecha de confirmacion. La ultima captura todavia muestra el aviso de organizacion pendiente, por lo que no se debe considerar validado el login hasta comprobar esos valores y completar una entrada real.
 2. **Confirmar las cuentas y aprobaciones:** comprobar que la cuenta administradora tenga `role = 'admin'` y `status = 'active'`, y que una institucion aprobada pueda iniciar sesion despues de aplicar la migracion.
 3. **Completar el apartado de perfil:** permitir edicion persistente de los datos de organizacion y voluntariado, con validacion y permisos RLS.
-4. **Conectar donaciones a Supabase:** implementar publicacion, consulta, filtros, edicion, cancelacion y transiciones de estado; retirar los datos en memoria de ese flujo.
-5. **Conectar solicitudes y reservas:** implementar solicitud, aceptar, rechazar y cancelar, garantizando que una donacion no quede reservada por mas de una solicitud aceptada.
-6. **Conectar entregas:** asignar voluntarios, guardar horarios y estados de recogida/entrega, y mostrar el historial persistente.
+4. **Verificar el flujo donante-beneficiaria en Supabase remoto:** aplicar/verificar las migraciones de imÃ¡genes, gestiÃ³n, lectura de solicitudes aceptadas, confirmaciÃ³n de entrega, acceso al perfil y renovaciÃ³n de ofertas; validar las polÃ­ticas con cuentas de cada rol.
+5. **Completar operaciones pendientes:** implementar cancelaciÃ³n de solicitudes por beneficiarias y asignaciÃ³n/seguimiento de voluntarios con permisos RLS y estados persistentes.
+6. **Completar el módulo de voluntariado:** conectar asignaciones y estados operativos de recogida/entrega a Supabase; la confirmación de recepción por la beneficiaria y el historial básico ya están conectados.
 7. **Completar administracion y seguimiento:** habilitar acciones seguras sobre cuentas, confirmar la migracion de catalogos en el proyecto remoto y completar notificaciones, incidencias y reputacion.
 8. **Revisar RLS y preparar despliegue:** comprobar cada operacion por rol y resolver los limites de estilos de la compilacion de produccion antes de publicar.
 
