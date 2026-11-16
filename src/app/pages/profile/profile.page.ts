@@ -1,4 +1,4 @@
-import { Component, computed, ElementRef, inject, signal, ViewChild } from '@angular/core';
+import { Component, computed, effect, ElementRef, inject, signal, ViewChild } from '@angular/core';
 import { IonContent } from '@ionic/angular';
 import { Router, RouterLink } from '@angular/router';
 import { AccountProfile, AuthService } from '../../services/auth.service';
@@ -14,6 +14,7 @@ export class ProfilePage {
 
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
+  private lastSessionKey = '';
   readonly account = signal<AccountProfile | null>(null);
   readonly fullName = signal('');
   readonly phone = signal('');
@@ -40,6 +41,7 @@ export class ProfilePage {
   readonly avatarError = signal('');
 
   // Dragging state
+  private profileLoadRevision = 0;
   private isDragging = false;
   private dragStartX = 0;
   private dragStartY = 0;
@@ -50,20 +52,40 @@ export class ProfilePage {
   readonly viewportSize = 250;
 
   constructor() {
-    this.reload();
+    effect(() => {
+      const session = this.auth.session();
+      const sessionKey = session ? `${session.email}:${session.role}` : '';
+      if (!sessionKey) {
+        this.lastSessionKey = '';
+        this.profileLoadRevision++;
+        this.account.set(null);
+        this.loading.set(false);
+        return;
+      }
+      if (sessionKey !== this.lastSessionKey) {
+        this.lastSessionKey = sessionKey;
+        this.reload();
+      }
+    });
   }
 
   reload(): void {
+    const revision = ++this.profileLoadRevision;
+    this.account.set(null);
+    this.fullName.set('');
+    this.phone.set('');
     this.loading.set(true);
     this.errorMessage.set('');
     this.auth.loadAccountProfile().subscribe({
       next: (profile) => {
+        if (revision !== this.profileLoadRevision) return;
         this.account.set(profile);
         this.fullName.set(profile.fullName);
         this.phone.set(profile.phone);
         this.loading.set(false);
       },
       error: (error: Error) => {
+        if (revision !== this.profileLoadRevision) return;
         this.errorMessage.set(error.message || 'No se pudo cargar el perfil.');
         this.loading.set(false);
       },

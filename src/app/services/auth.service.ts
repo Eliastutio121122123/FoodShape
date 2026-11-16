@@ -366,17 +366,6 @@ export class AuthService {
         .eq('id', user.id).single();
       if (profileError) throw profileError;
 
-      const avatarPath = profile.avatar_path as string | null;
-      const avatarUrl = avatarPath
-        ? this.supabase.storage.from('foodshare-avatars').getPublicUrl(avatarPath).data.publicUrl
-        : null;
-      try {
-        const cacheKey = 'foodshare_avatar_' + user.id;
-        if (avatarUrl) localStorage.setItem(cacheKey, avatarUrl);
-        else localStorage.removeItem(cacheKey);
-      } catch { /* The database path remains the source of truth if local storage is unavailable. */ }
-      this.currentAvatarState.set(avatarUrl);
-
       const account: AccountProfile = {
         id: profile.id,
         email: profile.email,
@@ -384,15 +373,14 @@ export class AuthService {
         phone: profile.phone,
         role: profile.role as AppRole,
         status: profile.status,
-        avatarUrl,
       };
 
       if (account.role === 'donor' || account.role === 'beneficiary') {
         const { data: organization, error } = await this.supabase.from('organizations')
           .select('name, organization_type, verification_status, rnc, address, city, representative_name, profile_type')
-          .eq('owner_id', user.id).maybeSingle();
+          .eq('owner_id', user.id).eq('organization_type', account.role).maybeSingle();
         if (error) throw error;
-        if (organization) account.organization = {
+        if (organization && organization.organization_type === account.role) account.organization = {
           name: organization.name,
           organizationType: organization.organization_type,
           verificationStatus: organization.verification_status,
@@ -414,6 +402,25 @@ export class AuthService {
           status: volunteer.status,
         };
       }
+
+      // Account/profile queries can finish after a user switches accounts in
+      // another tab. Never return or cache data for the previous auth user.
+      const { data: { user: currentUser }, error: currentUserError } = await this.supabase.auth.getUser();
+      if (currentUserError || !currentUser || currentUser.id !== user.id) {
+        throw new Error('La sesión cambió mientras se cargaba el perfil. Vuelve a intentarlo.');
+      }
+
+      const avatarPath = profile.avatar_path as string | null;
+      const avatarUrl = avatarPath
+        ? this.supabase.storage.from('foodshare-avatars').getPublicUrl(avatarPath).data.publicUrl
+        : null;
+      try {
+        const cacheKey = 'foodshare_avatar_' + user.id;
+        if (avatarUrl) localStorage.setItem(cacheKey, avatarUrl);
+        else localStorage.removeItem(cacheKey);
+      } catch { /* The database path remains the source of truth if local storage is unavailable. */ }
+      this.currentAvatarState.set(avatarUrl);
+      account.avatarUrl = avatarUrl;
 
       return account;
     })());
@@ -1520,6 +1527,16 @@ export class AuthService {
   }
 
   private async loadSession(userId: string, email: string): Promise<void> {
+    const role = await this.getActiveRole(userId);
+    const { data: { session }, error } = await this.supabase.auth.getSession();
+    // Auth events can overlap when accounts are switched in another tab. A
+    // late profile lookup must not restore an older user's role or avatar.
+    if (error || !session || session.user.id !== userId) return;
+    if (!role) {
+      this.sessionState.set(null);
+      this.currentAvatarState.set(null);
+      return;
+    }
     try {
       const cacheKey = 'foodshare_avatar_' + userId;
       const cachedAvatar = localStorage.getItem(cacheKey);
@@ -1527,10 +1544,9 @@ export class AuthService {
         this.currentAvatarState.set(cachedAvatar);
       } else {
         localStorage.removeItem(cacheKey);
+        this.currentAvatarState.set(null);
       }
     } catch {}
-    const role = await this.getActiveRole(userId);
-    if (!role) { this.sessionState.set(null); return; }
     this.sessionState.set({ email, role });
   }
 
@@ -1592,7 +1608,8 @@ export class AuthService {
     }
 
     if (data.role === 'donor' || data.role === 'beneficiary') {
-      const { data: organization } = await this.supabase.from('organizations').select('verification_status').eq('owner_id', userId).maybeSingle();
+      const { data: organization } = await this.supabase.from('organizations').select('verification_status')
+        .eq('owner_id', userId).eq('organization_type', data.role).maybeSingle();
       if (organization && organization.verification_status !== 'approved') {
         return null;
       }

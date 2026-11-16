@@ -2,6 +2,13 @@
 
 **Estado revisado:** 15 de noviembre de 2026.
 
+## Corrección de carga de identidad del perfil
+
+- `loadAccountProfile()` limita la consulta institucional al propietario autenticado y al tipo de organización que corresponde al rol del perfil; los datos de voluntariado se consultan por el UID autenticado.
+- Antes de retornar o actualizar la foto global, vuelve a comprobar que la sesión siga siendo del mismo usuario que inició la carga. Esto evita que respuestas lentas tras cambiar de cuenta muestren el perfil anterior.
+- `loadSession()` valida el usuario de la sesión vigente antes de aplicar el rol o avatar de una consulta previa, evitando que una respuesta tardía sobrescriba el estado de otra cuenta abierta en otra pestaña.
+- La pantalla de perfil borra los datos anteriores al recargar y descarta respuestas obsoletas. Los campos institucionales solo se muestran para donantes/beneficiarios; voluntariado conserva su bloque propio.
+
 ## Actualización del 15 de noviembre de 2026: organización donante
 
 Esta actualización reemplaza las descripciones anteriores de los requerimientos 7–16 y 21–22 **para el panel de la organización donante**. El flujo del mercado y la creación de solicitudes desde el panel beneficiario siguen siendo demostrativos y se detallan en la sección 6.
