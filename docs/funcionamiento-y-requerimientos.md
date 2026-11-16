@@ -30,7 +30,7 @@ Las migraciones y el código están versionados en GitHub. La ejecución remota 
 ### Estado pendiente relacionado
 
 - El panel de beneficiarios todavía usa `DonationService` y `DonationRequestService` con datos en memoria. Por eso, la búsqueda y creación de solicitudes desde el mercado beneficiario aún no consumen estas donaciones persistentes. La política RLS ya impide consultar publicaciones ocultas mediante Supabase; falta conectar el mercado y su flujo de solicitud a esas consultas.
-- La aceptación/rechazo del lado donante está conectada; la creación/cancelación del lado beneficiario y la coordinación completa de entregas todavía requieren integración de extremo a extremo.
+- La aceptación/rechazo del lado donante y la confirmación final por la beneficiaria están conectadas; la creación/cancelación de solicitudes desde el mercado beneficiario todavía requiere integración adicional.
 - `npx tsc -p tsconfig.app.json --noEmit` pasó. `npx ng build --configuration development --output-path .angular/codex-avatar-check` completó correctamente el 15 de noviembre. No se ejecutaron pruebas automatizadas.
 
 ### Cambios publicados
@@ -54,8 +54,19 @@ Este documento conserva el alcance funcional acordado y describe quÃ© partes e
 
 ### Límites conocidos
 
-- No existen rutas separadas para «Buscar donaciones», «Mis solicitudes» o «Historial»; son secciones locales del panel bajo `/app/beneficiary`. No existe ubicación de la beneficiaria para un cálculo de distancia, ni un flujo de mapa.
-- El historial solo incluye entregas cuyo estado de `deliveries` es `delivered` y tiene fecha; los alimentos recibidos se agrupan usando cantidad solicitada (o cantidad publicada si no se informó una) y unidad.
+- No existen rutas separadas para «Buscar donaciones», «Mis solicitudes» o «Historial»; son secciones locales del panel bajo `/app/beneficiary`. No existe ubicación de la beneficiaria para un cálculo de distancia ni seguimiento GPS.
+- La búsqueda puede mostrar dirección de recogida y enlace a ruta estimada una vez aceptada la solicitud. No se afirma que el mapa se actualice en vivo; el destino utiliza la dirección de la organización beneficiaria y las coordenadas solo se usan cuando están disponibles y son válidas.
+- El historial incluye entregas con estado `delivered` y confirmación de recepción por beneficiaria; las cantidades usan la solicitada (o la publicada cuando no se informó) y su unidad.
+
+## Actualización del 15 de noviembre de 2026: coordinación y confirmación de entregas
+
+- La aceptación del donante sigue usando `review_donation_request`. En una sola transacción reserva la donación, marca la solicitud como `accepted`, rechaza otras solicitudes pendientes del mismo alimento y crea el registro de `deliveries` en estado `pending`. Así la solicitud aceptada permanece visible en ambas organizaciones.
+- «Solicitudes» del donante ahora muestra el alimento y cantidad, el estado del seguimiento, direcciones autorizadas de recogida y destino y un enlace a Google Maps cuando ambas ubicaciones tienen coordenadas válidas o direcciones utilizables. El enlace representa una ruta estimada, no seguimiento GPS en tiempo real. El donante puede ver cuándo la beneficiaria confirmó; no puede confirmar por ella.
+- «Mis solicitudes» de la beneficiaria muestra el estado de coordinación y los próximos pasos. En solicitudes aceptadas puede abrir seguimiento y, cuando corresponde, confirmar la recepción. La acción llama a `confirm_beneficiary_delivery`; un envío repetido se rechaza en la base de datos y la interfaz refresca solicitudes e historial.
+- `deliveries.status` reutiliza `pending`, `assigned`, `pickup_in_progress`, `picked_up`, `delivered` y `cancelled`; `donation_requests.status` conserva `accepted` y solo pasa a `delivered` el registro de entrega. `donations.status` termina en `delivered` después de la confirmación. Los campos `received_confirmed_at` y `received_confirmed_by` registran la confirmación verificable de la beneficiaria.
+- Nueva migración `supabase/migrations/20261115200000_beneficiary_delivery_confirmation.sql`: añade los campos de confirmación, crea entregas faltantes para solicitudes aceptadas, actualiza la RPC de aceptación, impide cambios directos a estados de solicitud/confirmación y añade la RPC segura de confirmación. La confirmación exige que la sesión sea propietaria de la organización beneficiaria asociada. RLS mantiene lectura limitada a las partes autorizadas y al voluntario asignado.
+- Inicio del donante, métricas recibidas de la beneficiaria e historial filtran por confirmación registrada para que un estado `delivered` no se interprete como recepción confirmada sin el actor beneficiario. Una entrega marcada `delivered` por datos anteriores sin campos de confirmación se presenta como pendiente de confirmación y no ingresa al historial confirmado.
+- La migración debe aplicarse al proyecto Supabase remoto antes de usar el flujo; no se ejecutó SQL remoto en esta tarea. No hay ubicación GPS de destino ni servicio de seguimiento en vivo en el proyecto. Cuando falten direcciones o coordenadas, se muestra lo disponible y se omite el enlace de ruta que no se pueda construir.
 
 ## 1. Contexto general
 

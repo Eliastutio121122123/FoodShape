@@ -76,9 +76,9 @@ export class DonorPage {
   readonly visibleRequests = computed(() => this.requests().filter((request) => {
     const filter = this.requestStatusFilter();
     if (filter === 'pending') return request.status === 'pending';
-    if (filter === 'accepted') return request.status === 'accepted' && !['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+    if (filter === 'accepted') return request.status === 'accepted' && !request.receivedConfirmedAt && request.deliveryStatus !== 'cancelled';
     return request.status === 'rejected' || request.status === 'cancelled'
-      || ['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+      || Boolean(request.receivedConfirmedAt) || request.deliveryStatus === 'cancelled';
   }));
   readonly filteredDonations = computed(() => {
     const search = this.donationSearch().trim().toLocaleLowerCase();
@@ -359,9 +359,9 @@ export class DonorPage {
   requestCount(filter: RequestStatusFilter): number {
     return this.requests().filter((request) => {
       if (filter === 'pending') return request.status === 'pending';
-      if (filter === 'accepted') return request.status === 'accepted' && !['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+      if (filter === 'accepted') return request.status === 'accepted' && !request.receivedConfirmedAt && request.deliveryStatus !== 'cancelled';
       return request.status === 'rejected' || request.status === 'cancelled'
-        || ['delivered', 'completed', 'cancelled'].includes(request.deliveryStatus ?? '');
+        || Boolean(request.receivedConfirmedAt) || request.deliveryStatus === 'cancelled';
     }).length;
   }
 
@@ -404,9 +404,40 @@ export class DonorPage {
   }
 
   requestOutcomeLabel(request: DonorRequestInboxItem): string {
-    if (request.deliveryStatus === 'delivered' || request.deliveryStatus === 'completed') return 'Entrega completada';
+    if (request.receivedConfirmedAt) return 'Recepción confirmada por la beneficiaria';
     if (request.deliveryStatus === 'cancelled') return 'Entrega cancelada';
+    if (request.deliveryStatus === 'delivered') return 'Entrega registrada; confirmación pendiente';
+    if (request.status === 'accepted') return 'Coordinar recogida y entrega';
     return this.requestStatusLabel(request.status);
+  }
+
+  deliveryStatusLabel(request: DonorRequestInboxItem): string {
+    if (request.receivedConfirmedAt) return 'Recepción confirmada por la beneficiaria';
+    return ({
+      pending: 'Entrega aceptada · coordinar la recogida',
+      assigned: 'Recogida coordinada',
+      pickup_in_progress: 'Recogida en curso',
+      picked_up: 'Alimento recogido · pendiente de recepción',
+      delivered: 'Entrega registrada · falta confirmar recepción',
+      cancelled: 'Entrega cancelada',
+    } as Record<string, string>)[request.deliveryStatus ?? 'pending'] ?? 'Coordinar recogida y entrega';
+  }
+
+  requestDirectionsUrl(request: DonorRequestInboxItem): string | null {
+    const origin = this.mapPlace(request.pickupAddress, request.pickupCity, request.pickupLatitude, request.pickupLongitude);
+    const destination = [request.beneficiaryAddress.trim(), request.beneficiaryCity.trim()].filter(Boolean).join(', ');
+    if (!origin || !destination) return null;
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`;
+  }
+
+  requestReceiptDate(value: string): string {
+    return new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  }
+
+  private mapPlace(address: string, city: string, latitude: number | null, longitude: number | null): string {
+    if (latitude !== null && longitude !== null && Number.isFinite(latitude) && Number.isFinite(longitude)
+      && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180) return `${latitude},${longitude}`;
+    return [address.trim(), city.trim()].filter(Boolean).join(', ');
   }
 
   setDonationSearch(event: Event): void { this.donationSearch.set((event.target as HTMLInputElement).value); }

@@ -127,12 +127,20 @@ export interface DonorRequestInboxItem {
   expiresAt: string;
   deliveryStatus: string | null;
   deliveredAt: string | null;
+  deliveryId: string | null;
+  receivedConfirmedAt: string | null;
+  receivedConfirmedBy: string | null;
   beneficiaryId: string;
   beneficiaryName: string;
   beneficiaryType: string | null;
   beneficiaryCity: string;
+  beneficiaryAddress: string;
   beneficiaryPhone: string;
   beneficiaryVerified: boolean;
+  pickupAddress: string;
+  pickupCity: string;
+  pickupLatitude: number | null;
+  pickupLongitude: number | null;
 }
 export interface DonorHistoryEntry {
   id: string;
@@ -175,16 +183,23 @@ export interface BeneficiaryRequest {
   updatedAt: string;
   deliveryStatus: string | null;
   deliveredAt: string | null;
+  deliveryId: string | null;
+  receivedConfirmedAt: string | null;
+  receivedConfirmedBy: string | null;
   pickupAddress: string | null;
   pickupCity: string;
   pickupStartsAt: string;
   pickupEndsAt: string;
+  pickupLatitude: number | null;
+  pickupLongitude: number | null;
 }
 export interface BeneficiaryDashboardSnapshot {
   organizationName: string;
   fullName: string;
   verificationStatus: string;
   organizationStatus: string;
+  organizationAddress: string;
+  organizationCity: string;
   donations: BeneficiaryDonation[];
   requests: BeneficiaryRequest[];
   receivedByUnitThisMonth: { unit: string; quantity: number }[];
@@ -652,7 +667,7 @@ export class AuthService {
 
       const [profileResult, organizationResult] = await Promise.all([
         this.supabase.from('profiles').select('id, full_name, role').eq('id', user.id).maybeSingle(),
-        this.supabase.from('organizations').select('id, name, verification_status, status, city')
+        this.supabase.from('organizations').select('id, name, verification_status, status, city, address')
           .eq('owner_id', user.id).eq('organization_type', 'beneficiary').maybeSingle(),
       ]);
       if (profileResult.error) throw profileResult.error;
@@ -692,7 +707,7 @@ export class AuthService {
       const requestDonationIds = [...new Set(requests.map((request) => request.donation_id))];
       const [deliveryResult, requestDonationsResult] = await Promise.all([
         requestIds.length
-          ? this.supabase.from('deliveries').select('id, request_id, status, delivered_at, created_at').in('request_id', requestIds)
+          ? this.supabase.from('deliveries').select('id, request_id, status, delivered_at, received_confirmed_at, received_confirmed_by, created_at').in('request_id', requestIds)
           : Promise.resolve({ data: [], error: null }),
         requestDonationIds.length
           ? this.supabase.from('donations').select('id, food_name, quantity, unit, city, pickup_starts_at, pickup_ends_at, food_categories(name)').in('id', requestDonationIds)
@@ -704,28 +719,37 @@ export class AuthService {
       const requestDonationsById = new Map((requestDonationsResult.data ?? []).map((donation) => [donation.id, donation]));
       const acceptedDonationIds = [...new Set(requests.filter((request) => request.status === 'accepted').map((request) => request.donation_id))];
       const acceptedDetailsResult = acceptedDonationIds.length
-        ? await this.supabase.from('donations').select('id, address').in('id', acceptedDonationIds)
+        ? await this.supabase.from('donations').select('id, address, latitude, longitude').in('id', acceptedDonationIds)
         : { data: [], error: null };
       if (acceptedDetailsResult.error) throw acceptedDetailsResult.error;
       const pickupAddressByDonation = new Map((acceptedDetailsResult.data ?? []).map((donation) => [donation.id, donation.address]));
+      const pickupCoordinatesByDonation = new Map((acceptedDetailsResult.data ?? []).map((donation) => [donation.id, {
+        latitude: donation.latitude === null ? null : Number(donation.latitude),
+        longitude: donation.longitude === null ? null : Number(donation.longitude),
+      }]));
       const requestItems: BeneficiaryRequest[] = requests.map((request) => {
         const donation = requestDonationsById.get(request.donation_id);
         const categoryRelation = donation?.food_categories as CategoryRelation | undefined;
         const delivery = deliveriesByRequest.get(request.id);
+        const pickupCoordinates = request.status === 'accepted' ? pickupCoordinatesByDonation.get(request.donation_id) : undefined;
         return {
           id: request.id, donationId: request.donation_id, donationName: donation?.food_name ?? 'Donación ya no disponible',
           categoryName: categoryName(categoryRelation ?? null), requestedQuantity: request.quantity_requested === null ? null : Number(request.quantity_requested),
           donationQuantity: Number(donation?.quantity ?? request.quantity_requested ?? 0), unit: donation?.unit ?? 'unidades', status: request.status,
           requestedAt: request.requested_at, updatedAt: request.updated_at,
           deliveryStatus: delivery?.status ?? null, deliveredAt: delivery?.delivered_at ?? null,
+          deliveryId: delivery?.id ?? null, receivedConfirmedAt: delivery?.received_confirmed_at ?? null,
+          receivedConfirmedBy: delivery?.received_confirmed_by ?? null,
           pickupAddress: request.status === 'accepted' ? pickupAddressByDonation.get(request.donation_id) ?? null : null,
           pickupCity: donation?.city ?? '', pickupStartsAt: donation?.pickup_starts_at ?? '', pickupEndsAt: donation?.pickup_ends_at ?? '',
+          pickupLatitude: pickupCoordinates?.latitude ?? null,
+          pickupLongitude: pickupCoordinates?.longitude ?? null,
         };
       });
 
       const receivedByUnit = new Map<string, number>();
       for (const request of requestItems) {
-        if (!request.deliveredAt || Date.parse(request.deliveredAt) < Date.parse(monthStart)) continue;
+        if (!request.receivedConfirmedAt || Date.parse(request.receivedConfirmedAt) < Date.parse(monthStart)) continue;
         const quantity = request.requestedQuantity ?? request.donationQuantity;
         receivedByUnit.set(request.unit, (receivedByUnit.get(request.unit) ?? 0) + quantity);
       }
@@ -735,6 +759,8 @@ export class AuthService {
         fullName: profileResult.data.full_name,
         verificationStatus: organization.verification_status,
         organizationStatus: organization.status,
+        organizationAddress: organization.address,
+        organizationCity: organization.city,
         donations,
         requests: requestItems,
         receivedByUnitThisMonth: [...receivedByUnit].map(([unit, quantity]) => ({ unit, quantity })),
@@ -779,6 +805,13 @@ export class AuthService {
     })());
   }
 
+  confirmBeneficiaryDelivery(deliveryId: string): Observable<void> {
+    return from((async () => {
+      const { error } = await this.supabase.rpc('confirm_beneficiary_delivery', { p_delivery_id: deliveryId });
+      if (error) throw new Error(error.message || 'No se pudo confirmar la recepción. Inténtalo de nuevo.');
+    })());
+  }
+
 
   loadDonorDashboard(): Observable<DonorDashboardSnapshot> {
     return from((async () => {
@@ -810,8 +843,9 @@ export class AuthService {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
       const { data: deliveryRows, error: deliveriesError } = requestIds.length
-        ? await this.supabase.from('deliveries').select('id, request_id, delivered_at')
+        ? await this.supabase.from('deliveries').select('id, request_id, delivered_at, received_confirmed_at')
           .in('request_id', requestIds).eq('status', 'delivered')
+          .not('received_confirmed_at', 'is', null)
           .gte('delivered_at', monthStart).lt('delivered_at', nextMonthStart)
         : { data: [], error: null };
       if (deliveriesError) throw deliveriesError;
@@ -1194,12 +1228,13 @@ export class AuthService {
       if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
 
       const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
-        .select('id, food_name, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at')
+        .select('id, food_name, quantity, unit, status, expires_at, pickup_starts_at, pickup_ends_at, address, city, latitude, longitude')
         .eq('donor_organization_id', organization.id);
       if (donationsError) throw donationsError;
       const donations = (donationRows ?? []) as {
         id: string; food_name: string; quantity: number; unit: string; status: string;
-        expires_at: string; pickup_starts_at: string; pickup_ends_at: string;
+        expires_at: string; pickup_starts_at: string; pickup_ends_at: string; address: string; city: string;
+        latitude: number | null; longitude: number | null;
       }[];
       const donationIds = donations.map((donation) => donation.id);
       if (!donationIds.length) return [];
@@ -1218,14 +1253,21 @@ export class AuthService {
       const requestIds = requests.map((request) => request.id);
       const [beneficiariesResult, deliveriesResult] = await Promise.all([
         this.supabase.from('organizations').select('id, name, profile_type, city, phone, verification_status').in('id', beneficiaryIds),
-        this.supabase.from('deliveries').select('request_id, status, delivered_at').in('request_id', requestIds),
+        this.supabase.from('deliveries').select('id, request_id, status, delivered_at, received_confirmed_at, received_confirmed_by').in('request_id', requestIds),
       ]);
       if (beneficiariesResult.error) throw beneficiariesResult.error;
       if (deliveriesResult.error) throw deliveriesResult.error;
 
+      const acceptedBeneficiaryIds = [...new Set(requests.filter((request) => request.status === 'accepted').map((request) => request.beneficiary_organization_id))];
+      const acceptedAddressesResult = acceptedBeneficiaryIds.length
+        ? await this.supabase.from('organizations').select('id, address').in('id', acceptedBeneficiaryIds)
+        : { data: [], error: null };
+      if (acceptedAddressesResult.error) throw acceptedAddressesResult.error;
+
       const beneficiaryById = new Map((beneficiariesResult.data ?? []).map((beneficiary) => [beneficiary.id, beneficiary]));
       const donationById = new Map(donations.map((donation) => [donation.id, donation]));
       const deliveryByRequestId = new Map((deliveriesResult.data ?? []).map((delivery) => [delivery.request_id, delivery]));
+      const acceptedAddressByBeneficiaryId = new Map((acceptedAddressesResult.data ?? []).map((beneficiary) => [beneficiary.id, beneficiary.address]));
       return requests.flatMap((request) => {
         const donation = donationById.get(request.donation_id);
         if (!donation) return [];
@@ -1238,10 +1280,16 @@ export class AuthService {
           donationQuantity: Number(donation.quantity), donationUnit: donation.unit, donationStatus: donation.status,
           pickupStartsAt: donation.pickup_starts_at, pickupEndsAt: donation.pickup_ends_at, expiresAt: donation.expires_at,
           deliveryStatus: delivery?.status ?? null, deliveredAt: delivery?.delivered_at ?? null,
+          deliveryId: delivery?.id ?? null, receivedConfirmedAt: delivery?.received_confirmed_at ?? null,
+          receivedConfirmedBy: delivery?.received_confirmed_by ?? null,
           beneficiaryId: request.beneficiary_organization_id,
           beneficiaryName: beneficiary?.name ?? 'Organización beneficiaria',
           beneficiaryType: beneficiary?.profile_type ?? null, beneficiaryCity: beneficiary?.city ?? '',
           beneficiaryPhone: beneficiary?.phone ?? '', beneficiaryVerified: beneficiary?.verification_status === 'approved',
+          beneficiaryAddress: request.status === 'accepted' ? acceptedAddressByBeneficiaryId.get(request.beneficiary_organization_id) ?? '' : '',
+          pickupAddress: donation.address, pickupCity: donation.city,
+          pickupLatitude: donation.latitude === null ? null : Number(donation.latitude),
+          pickupLongitude: donation.longitude === null ? null : Number(donation.longitude),
         }];
       });
     })());
@@ -1287,8 +1335,8 @@ export class AuthService {
       }
 
       const [deliveriesResult, beneficiariesResult] = await Promise.all([
-        this.supabase.from('deliveries').select('id, request_id, status, delivered_at, pickup_at, created_at')
-          .in('request_id', requestIds).in('status', ['delivered', 'completed']),
+        this.supabase.from('deliveries').select('id, request_id, status, delivered_at, pickup_at, created_at, received_confirmed_at')
+          .in('request_id', requestIds).eq('status', 'delivered').not('received_confirmed_at', 'is', null),
         this.supabase.from('organizations').select('id, name')
           .in('id', [...new Set(requests.map((request) => request.beneficiary_organization_id))]),
       ]);
