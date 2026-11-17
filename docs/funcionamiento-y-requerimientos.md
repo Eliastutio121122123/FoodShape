@@ -1,6 +1,6 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 15 de noviembre de 2026.
+**Estado revisado:** 17 de noviembre de 2026.
 
 > **Para qué sirve este documento:** es el inventario funcional y la guía de seguimiento de FoodShare. Reúne las 30 funcionalidades acordadas, explica qué está implementado y qué falta, y registra las validaciones pendientes en Supabase. Actualízalo cuando cambie el sistema para que el equipo tenga una referencia compartida y no confunda pantallas, maquetas o tablas con funciones terminadas.
 
@@ -24,6 +24,13 @@ Esta sección reúne las funciones incorporadas recientemente y reemplaza las de
 - La asignación y el seguimiento operativo de voluntarios todavía no están integrados de extremo a extremo con este flujo.
 - La cancelación de solicitudes por parte del beneficiario no está implementada en el mercado conectado.
 - Las migraciones nuevas requieren aplicación y validación en Supabase remoto antes de dar por comprobados los permisos y transiciones allí.
+
+## Portal de apoyo alimentario para personas
+
+- Se incorporó el rol `person`, con registro personal, perfil activo y panel protegido en `/app/person`. El panel permite consultar organizaciones aprobadas por ciudad, revisar alimentos disponibles, contactar a las organizaciones, enviar solicitudes para unirse o pedir una ración y consultar el estado de esas solicitudes.
+- Donantes y organizaciones beneficiarias pueden abrir `/app/aid-requests` para revisar solicitudes personales pendientes, aprobarlas o rechazarlas; al aprobar una solicitud de ración, pueden coordinar fecha y hora. El perfil administrativo permite filtrar el rol de persona.
+- La migración `20261117090000_individual_beneficiaries.sql` añade el rol, la tabla `individual_aid_requests`, las políticas RLS y la notificación a la organización. La migración correctiva `20261117100000_fix_individual_aid_rls.sql` evita recursión entre políticas, concede permiso de inserción para `donation_id` y limita la revisión de solicitudes a estados pendientes. Ambas requieren aplicación en Supabase remoto; no se ejecutaron ni verificaron allí durante esta revisión.
+- **Límite funcional:** aprobar una solicitud individual asociada a una donación no descuenta ni reserva automáticamente la cantidad de esa publicación. La coordinación de existencias para solicitudes personales debe validarse antes de usarla para comprometer inventario.
 
 ## Perfil beneficiario visible desde solicitudes del donante
 
