@@ -108,7 +108,7 @@ export class AuthPage {
     this.auth.login(email, password).subscribe({
       next: (result) => {
         this.auth.signIn(result.email, result.role);
-        void this.router.navigateByUrl('/app/profile');
+        void this.router.navigateByUrl(`/app/${result.role}`);
       },
       error: (error: { status?: number; code?: string; message?: string }) => {
         const code = error.code?.toLowerCase();
@@ -136,7 +136,7 @@ export class AuthPage {
   private handleAuthCallback(): void {
     if (!window.location.hash.includes('access_token') && !window.location.search.includes('code=')) return;
     void this.auth.refreshSession().then((session) => {
-      if (session) void this.router.navigateByUrl('/app/profile');
+      if (session) void this.router.navigateByUrl(`/app/${session.role}`);
       else this.googleError.set('La cuenta de Google todavía no tiene un perfil activo en FoodShare.');
       window.history.replaceState({}, document.title, window.location.pathname);
     });
