@@ -1,6 +1,6 @@
 <main class="beneficiary-app">
   <header class="app-header">
-    <a class="brand" routerLink="/app/beneficiary" aria-label="FoodShare inicio"><span class="brand-mark">⌁</span><span>FoodShare</span></a>
+    <a class="brand" routerLink="/app/beneficiary" aria-label="FoodShare inicio"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a>
     <div class="header-actions">
       <button class="notification-button" type="button" (click)="toggleNotifications()" aria-label="Notificaciones" [attr.aria-expanded]="notificationsOpen()">
         ♧ @if (unreadCount() > 0) { <i>{{ unreadCount() }}</i> }

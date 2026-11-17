@@ -1,5 +1,5 @@
 <main class="workspace" [class.beneficiary-active]="role() === 'beneficiary'">
-  <header><a class="brand" routerLink="/"><span>⌁</span>FoodShare</a><div class="role-switch"><a routerLink="/app/admin">Admin</a><a routerLink="/app/donor">Donante</a><a routerLink="/app/beneficiary">Beneficiario</a><a routerLink="/app/volunteer">Voluntario</a></div><button class="avatar" aria-label="Mi perfil" (click)="openProfile()">{{ (session()?.email || 'FS').slice(0, 1).toUpperCase() }}</button></header>
+  <header><a class="brand" routerLink="/" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a><div class="role-switch"><a routerLink="/app/admin">Admin</a><a routerLink="/app/donor">Donante</a><a routerLink="/app/beneficiary">Beneficiario</a><a routerLink="/app/volunteer">Voluntario</a></div><button class="avatar" aria-label="Mi perfil" (click)="openProfile()">{{ (session()?.email || 'FS').slice(0, 1).toUpperCase() }}</button></header>
   <div class="notice">Vista de diseño con información de demostración. No hay conexión a base de datos.</div>
   @if (role() === 'beneficiary') {
     <section class="desktop-beneficiary">

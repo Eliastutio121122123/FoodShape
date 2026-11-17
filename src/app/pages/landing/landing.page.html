@@ -1,7 +1,7 @@
 <ion-content [fullscreen]="true">
 <main class="landing">
   <nav class="landing-nav">
-    <a class="brand" routerLink="/"><span class="brand-mark">⌁</span>FoodShare</a>
+    <a class="brand" routerLink="/" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a>
     <div class="nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#roles">Para quién es</a><a href="#impacto">Impacto</a><a href="#preguntas">Preguntas</a></div>
     @if (dashboardRoute(); as route) {
       <a class="nav-profile-pill" [routerLink]="route" title="Ir a mi panel">
@@ -49,6 +49,6 @@
   <section class="faq" id="preguntas"><span class="eyebrow">Preguntas frecuentes</span><h2>Todo lo necesario para comenzar.</h2><details><summary>¿Quién puede usar FoodShare?</summary><p>Organizaciones donantes, organizaciones beneficiarias, personas que necesitan apoyo alimentario y personas voluntarias.</p></details><details><summary>¿FoodShare vende alimentos?</summary><p>No. FoodShare facilita procesos de donación, recogida y entrega de alimentos.</p></details><details><summary>¿Cómo se controla el proceso?</summary><p>Las donaciones, solicitudes y entregas tienen estados visibles y un historial de seguimiento.</p></details></section>
 
   <section class="final-cta"><div><span class="eyebrow">Comienza hoy</span><h2>Comparte alimentos.<br><em>Multiplica oportunidades.</em></h2></div><a class="button" routerLink="/register">Crear una cuenta</a></section>
-  <footer><a class="brand" routerLink="/"><span class="brand-mark">⌁</span>FoodShare</a><p>Una plataforma para compartir, conectar y transformar.</p><div><a href="#como-funciona">Cómo funciona</a><a href="#roles">Perfiles</a><a routerLink="/login">Iniciar sesión</a></div><small>© 2026 FoodShare · Proyecto académico</small></footer>
+  <footer><a class="brand" routerLink="/" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a><p>Una plataforma para compartir, conectar y transformar.</p><div><a href="#como-funciona">Cómo funciona</a><a href="#roles">Perfiles</a><a routerLink="/login">Iniciar sesión</a></div><small>© 2026 FoodShare · Proyecto académico</small></footer>
 </main>
 </ion-content>

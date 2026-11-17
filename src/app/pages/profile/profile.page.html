@@ -1,7 +1,7 @@
 <ion-content [fullscreen]="true">
   <main class="profile-page">
     <header class="profile-topbar">
-      <a class="brand" routerLink="/">FoodShare</a>
+      <a class="brand" routerLink="/" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a>
       <div class="profile-nav-actions">
         <a class="back-link" [routerLink]="homeRoute()">Volver al panel</a>
         <button class="logout-button" type="button" (click)="signOut()" [disabled]="signingOut()">

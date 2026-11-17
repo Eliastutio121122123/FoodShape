@@ -2,12 +2,12 @@
   <main class="donor-shell">
     <header class="mobile-topbar">
       <button (click)="toggleMenu()" aria-label="Abrir menú">☰</button>
-      <a routerLink="/" class="mobile-brand"><i>⌁</i>FoodShare</a>
+      <a routerLink="/" class="mobile-brand" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a>
       <button aria-label="Notificaciones" class="notification">♧<b></b></button>
     </header>
 
     <aside class="sidebar" [class.open]="menuOpen()">
-      <a routerLink="/" class="brand"><i>⌁</i>FoodShare</a>
+      <a routerLink="/" class="brand" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a>
       <div class="organization"><span class="organization-avatar">{{ initials(dashboard()?.organizationName || 'Mi organización') }}</span><div><strong>{{ dashboard()?.organizationName || 'Mi organización' }}</strong><small>Organización donante</small></div><button aria-label="Opciones">···</button></div>
       <span class="menu-label">MENÚ PRINCIPAL</span>
       <nav>

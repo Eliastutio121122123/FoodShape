@@ -1,8 +1,8 @@
 <ion-content [fullscreen]="true">
   <main class="volunteer-shell">
-    <header class="mobile-topbar"><button (click)="toggleMenu()">☰</button><a routerLink="/" class="mobile-brand"><i>⌁</i>FoodShare</a><button class="notification">♧<b></b></button></header>
+    <header class="mobile-topbar"><button (click)="toggleMenu()">☰</button><a routerLink="/" class="mobile-brand" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a><button class="notification">♧<b></b></button></header>
     <aside class="sidebar" [class.open]="menuOpen()">
-      <a routerLink="/" class="brand"><i>⌁</i>FoodShare</a>
+      <a routerLink="/" class="brand" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a>
       <div class="volunteer-profile"><span class="vp-avatar" [class.has-photo]="avatarUrl()">@if (avatarUrl()) {<img [src]="avatarUrl()!" alt="Foto" class="vp-photo" />} @else {{{ avatarLetter() }}}</span><div><strong>{{ displayName() }}</strong><small>Voluntario activo</small></div></div>
       <span class="menu-label">MI ESPACIO</span>
       <nav>

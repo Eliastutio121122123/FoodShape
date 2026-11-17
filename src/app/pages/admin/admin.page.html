@@ -1,8 +1,8 @@
 <ion-content [fullscreen]="true">
   <main class="admin-shell">
-    <header class="mobile-topbar"><button (click)="toggleMenu()" aria-label="Abrir menú">☰</button><a class="mobile-brand" routerLink="/"><i>⌁</i>FoodShare</a><button class="notification">♧<b></b></button></header>
+    <header class="mobile-topbar"><button (click)="toggleMenu()" aria-label="Abrir menú">☰</button><a class="mobile-brand" routerLink="/" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a><button class="notification">♧<b></b></button></header>
     <aside class="sidebar" [class.open]="menuOpen()">
-      <a class="brand" routerLink="/"><i>⌁</i>FoodShare</a>
+      <a class="brand" routerLink="/" aria-label="FoodShare"><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></a>
       <div class="admin-profile"><span>FA</span><div><strong>FoodShare Admin</strong><small>Administración global</small></div><button>···</button></div>
       <span class="menu-label">ADMINISTRACIÓN</span>
       <nav><button [class.active]="section() === 'dashboard'" (click)="select('dashboard')"><i>▦</i> Dashboard</button><button [class.active]="section() === 'users'" (click)="select('users')"><i>♙</i> Usuarios</button><button [class.active]="section() === 'organizations'" (click)="select('organizations')"><i>⌂</i> Instituciones <b>{{ pendingOrganizations().length }}</b></button><button [class.active]="section() === 'catalogs'" (click)="select('catalogs')"><i>▤</i> Catálogos</button><button [class.active]="section() === 'reports'" (click)="select('reports')"><i>▥</i> Reportes</button></nav>
