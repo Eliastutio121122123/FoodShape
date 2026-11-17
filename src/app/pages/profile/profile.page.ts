@@ -24,7 +24,7 @@ export class ProfilePage {
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
   readonly roleName = computed(() => ({
-    admin: 'Administración', donor: 'Organización donante', beneficiary: 'Organización beneficiaria', volunteer: 'Voluntariado',
+    admin: 'Administración', donor: 'Organización donante', beneficiary: 'Organización beneficiaria', volunteer: 'Voluntariado', person: 'Personas necesitadas',
   })[this.account()?.role ?? 'volunteer']);
   readonly homeRoute = computed(() => {
     const role = this.account()?.role ?? this.auth.currentRole();

@@ -7,6 +7,7 @@
         <button type="button" (click)="selectRole('donor')"><b class="donor-icon">▣</b><span><strong>Organización donante</strong><small>Restaurante, supermercado, hotel o negocio con alimentos disponibles.</small></span><i>›</i></button>
         <button type="button" (click)="selectRole('beneficiary')"><b class="beneficiary-icon">⌂</b><span><strong>Organización beneficiaria</strong><small>Fundación, comedor, ONG o banco de alimentos.</small></span><i>›</i></button>
         <button type="button" (click)="selectRole('volunteer')"><b class="volunteer-icon">⌖</b><span><strong>Voluntariado</strong><small>Persona que apoya en recogidas y entregas.</small></span><i>›</i></button>
+        <button type="button" (click)="selectRole('person')"><b class="beneficiary-icon">♡</b><span><strong>Personas necesitadas</strong><small>Encuentra organizaciones cercanas, contáctalas y solicita apoyo.</small></span><i>›</i></button>
       </div><p class="switch">¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
     } @else if (isRegister() && selectedRole() === 'donor') {
       <button type="button" class="back" (click)="resetRole()">← Cambiar perfil</button><span class="eyebrow">Registro de donante</span><h1>Comparte los alimentos que pueden ayudar.</h1><p>Completa los datos de tu organización donante.</p>
@@ -66,6 +67,17 @@
           </button>
         </div>@if (isInvalid('password', 'beneficiary')) { <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small> }</label>
         <button class="primary" type="submit">Enviar registro</button><p class="form-note">La institución será revisada antes de solicitar donaciones.</p>
+      </form>
+    } @else if (isRegister() && selectedRole() === 'person') {
+      <button type="button" class="back" (click)="resetRole()">← Cambiar perfil</button><span class="eyebrow">Registro personal</span><h1>Encuentra apoyo de alimentos cerca de ti.</h1><p>Regístrate para conocer organizaciones, contactarlas y dar seguimiento a tus solicitudes de raciones.</p>
+      <form [formGroup]="personForm" (ngSubmit)="submitRegistration('person')" novalidate>
+        @if (registrationMessage()) { <p class="success-message" role="status">{{ registrationMessage() }}</p> }
+        @if (registrationError()) { <p class="field-error login-error" role="alert">{{ registrationError() }}</p> }
+        <label>Nombre completo<input formControlName="fullName" [class.invalid]="isInvalid('fullName', 'person')" autocomplete="name" placeholder="Tu nombre y apellido" />@if (isInvalid('fullName', 'person')) { <small class="field-error">Escribe tu nombre completo.</small> }</label>
+        <div class="two"><label>Correo electrónico<input formControlName="email" [class.invalid]="isInvalid('email', 'person')" type="email" autocomplete="email" placeholder="nombre@correo.com" />@if (isInvalid('email', 'person')) { <small class="field-error">Indica un correo válido.</small> }</label><label>Teléfono<input formControlName="phone" [class.invalid]="isInvalid('phone', 'person')" type="tel" autocomplete="tel" placeholder="(809) 000-0000" />@if (isInvalid('phone', 'person')) { <small class="field-error">Indica un teléfono válido.</small> }</label></div>
+        <label>Ciudad<input formControlName="city" [class.invalid]="isInvalid('city', 'person')" autocomplete="address-level2" placeholder="Santo Domingo" />@if (isInvalid('city', 'person')) { <small class="field-error">Indica tu ciudad.</small> }</label>
+        <label>Contraseña (mínimo 8 caracteres)<div class="password-input-wrap"><input formControlName="password" [class.invalid]="isInvalid('password', 'person')" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" placeholder="••••••••" /><button type="button" class="password-toggle-btn" (click)="togglePasswordVisibility()" [attr.aria-label]="showPassword() ? 'Ocultar contraseña' : 'Ver contraseña'"><span aria-hidden="true">{{ showPassword() ? '◉' : '◎' }}</span></button></div>@if (isInvalid('password', 'person')) { <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small> }</label>
+        <button class="primary" type="submit">Crear cuenta</button><p class="form-note">Te enviaremos un correo para confirmar tu cuenta.</p>
       </form>
     } @else if (isRegister() && selectedRole() === 'volunteer') {
       <button type="button" class="back" (click)="resetRole()">← Cambiar perfil</button><span class="eyebrow">Registro de voluntariado</span><h1>Tu tiempo puede llevar ayuda más lejos.</h1><p>Cuéntanos cómo puedes colaborar en las entregas.</p>

@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { from, Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
-export type AppRole = 'admin' | 'donor' | 'beneficiary' | 'volunteer';
+export type AppRole = 'admin' | 'donor' | 'beneficiary' | 'volunteer' | 'person';
 export interface AuthSession { email: string; role: AppRole; }
 export interface LoginResponse { email: string; role: AppRole; accessToken: string; expiresAt: string; }
 export type OrganizationApplicationStatus = 'pending' | 'approved' | 'rejected';
@@ -208,6 +208,22 @@ export interface BeneficiaryDashboardSnapshot {
   receivedByUnitThisMonth: { unit: string; quantity: number }[];
   notifications: { id: string; title: string; message: string; createdAt: string; read: boolean }[];
 }
+export interface CommunityOrganization {
+  id: string; name: string; organizationType: 'donor' | 'beneficiary'; profileType: string | null;
+  address: string; city: string; phone: string; email: string;
+}
+export interface PersonalAidRequest {
+  id: string; organizationId: string; donationId: string | null; organizationName: string; organizationType: 'donor' | 'beneficiary';
+  address: string; city: string; phone: string; email: string; requestType: 'membership' | 'ration';
+  status: 'pending' | 'approved' | 'rejected'; preferredDate: string | null; scheduledAt: string | null;
+  message: string | null; createdAt: string; foodName: string | null; quantity: number | null; unit: string | null;
+  pickupStartsAt: string | null; pickupEndsAt: string | null;
+}
+export interface PersonalFoodOffer {
+  id: string; organizationId: string; organizationName: string; foodName: string; quantity: number; unit: string;
+  categoryName: string; expiresAt: string; pickupStartsAt: string; pickupEndsAt: string;
+  address: string; city: string; phone: string; email: string;
+}
 export interface DonorDonationCreateOptions {
   organizationId: string;
   organizationName: string;
@@ -256,12 +272,12 @@ export interface AccountProfile {
   };
 }
 export interface RegistrationPayload {
-  role: Extract<AppRole, 'donor' | 'beneficiary' | 'volunteer'>; email: string; password: string; fullName: string;
+  role: Extract<AppRole, 'donor' | 'beneficiary' | 'volunteer' | 'person'>; email: string; password: string; fullName: string;
   organizationName?: string; rnc?: string; phone: string; address?: string; city?: string; profileType?: string;
   transportType?: string; otherTransportType?: string; availabilityZone?: string; agreementAccepted?: boolean;
 }
 
-const roles: AppRole[] = ['admin', 'donor', 'beneficiary', 'volunteer'];
+const roles: AppRole[] = ['admin', 'donor', 'beneficiary', 'volunteer', 'person'];
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -355,7 +371,7 @@ export class AuthService {
         } },
       });
       if (error) throw error;
-      return { email: data.user?.email ?? payload.email, role: payload.role, status: payload.role === 'volunteer' ? 'active' : 'pending' };
+      return { email: data.user?.email ?? payload.email, role: payload.role, status: payload.role === 'volunteer' || payload.role === 'person' ? 'active' : 'pending' };
     })());
   }
 
@@ -669,6 +685,110 @@ export class AuthService {
 
   setPendingOrganizations(applications: readonly OrganizationApplication[]): void { this.applicationsState.set(applications); }
   removePendingOrganization(id: string): void { this.applicationsState.update((items) => items.filter((item) => item.id !== id)); }
+
+  loadCommunityDirectory(city = ''): Observable<CommunityOrganization[]> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar organizaciones.');
+      const { data, error } = await this.supabase.from('organizations')
+        .select('id, name, organization_type, profile_type, address, city, phone, email')
+        .eq('verification_status', 'approved').eq('status', 'active').order('name');
+      if (error) throw error;
+      const needle = city.trim().toLocaleLowerCase();
+      return (data ?? []).filter((item) => !needle || String(item.city ?? '').toLocaleLowerCase().includes(needle))
+        .map((item) => ({ id: item.id, name: item.name, organizationType: item.organization_type, profileType: item.profile_type,
+          address: item.address, city: item.city, phone: item.phone, email: item.email }));
+    })());
+  }
+
+  loadPersonalAidRequests(): Observable<PersonalAidRequest[]> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar tus solicitudes.');
+      const { data, error } = await this.supabase.from('individual_aid_requests')
+        .select('id, organization_id, donation_id, request_type, status, preferred_date, scheduled_at, message, created_at, organizations!inner(name, organization_type, address, city, phone, email), donations(food_name, quantity, unit, address, city, pickup_starts_at, pickup_ends_at)')
+        .eq('person_id', user.id).order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((item) => {
+        const org = item.organizations as unknown as Record<string, string>;
+        const donation = item.donations as unknown as Record<string, string | number> | null;
+        return { id: item.id, organizationId: item.organization_id, donationId: item.donation_id, organizationName: org['name'],
+          organizationType: org['organization_type'] as 'donor' | 'beneficiary', address: donation?.['address'] as string ?? org['address'], city: donation?.['city'] as string ?? org['city'],
+          phone: org['phone'], email: org['email'], requestType: item.request_type as 'membership' | 'ration',
+          status: item.status as 'pending' | 'approved' | 'rejected', preferredDate: item.preferred_date,
+          scheduledAt: item.scheduled_at, message: item.message, createdAt: item.created_at,
+          foodName: donation?.['food_name'] as string | null ?? null, quantity: donation ? Number(donation['quantity']) : null,
+          unit: donation?.['unit'] as string | null ?? null, pickupStartsAt: donation?.['pickup_starts_at'] as string | null ?? null,
+          pickupEndsAt: donation?.['pickup_ends_at'] as string | null ?? null };
+      });
+    })());
+  }
+
+  loadPersonalFoodOffers(city = ''): Observable<PersonalFoodOffer[]> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para ver alimentos disponibles.');
+      const { data, error } = await this.supabase.from('donations')
+        .select('id, food_name, quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, address, city, organizations!inner(id, name, phone, email), food_categories(name)')
+        .eq('status', 'available').gt('expires_at', new Date().toISOString()).order('expires_at');
+      if (error) throw error;
+      const needle = city.trim().toLocaleLowerCase();
+      return (data ?? []).filter((item) => !needle || String(item.city ?? '').toLocaleLowerCase().includes(needle)).map((item) => {
+        const org = item.organizations as unknown as Record<string, string>;
+        const category = item.food_categories as unknown as Record<string, string> | null;
+        return { id: item.id, organizationId: org['id'], organizationName: org['name'], foodName: item.food_name,
+          quantity: Number(item.quantity), unit: item.unit, categoryName: category?.['name'] ?? 'Alimentos',
+          expiresAt: item.expires_at, pickupStartsAt: item.pickup_starts_at, pickupEndsAt: item.pickup_ends_at,
+          address: item.address, city: item.city, phone: org['phone'], email: org['email'] };
+      });
+    })());
+  }
+
+  createPersonalAidRequest(organizationId: string, requestType: 'membership' | 'ration', preferredDate: string | null, message: string, donationId: string | null = null): Observable<void> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para solicitar apoyo.');
+      const { error } = await this.supabase.from('individual_aid_requests').insert({
+        person_id: user.id, organization_id: organizationId, donation_id: donationId, request_type: requestType,
+        preferred_date: preferredDate || null, message: message.trim() || null,
+      });
+      if (error) throw error;
+    })());
+  }
+
+  loadOrganizationAidRequests(): Observable<PersonalAidRequest[]> {
+    return from((async () => {
+      const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error('Inicia sesión para revisar las solicitudes.');
+      const { data: organization, error: orgError } = await this.supabase.from('organizations')
+        .select('id').eq('owner_id', user.id).maybeSingle();
+      if (orgError || !organization) throw orgError ?? new Error('No encontramos la organización de esta cuenta.');
+      const { data, error } = await this.supabase.from('individual_aid_requests')
+        .select('id, organization_id, donation_id, request_type, status, preferred_date, scheduled_at, message, created_at, profiles!inner(full_name, phone, email), donations(food_name, quantity, unit, address, city, pickup_starts_at, pickup_ends_at)')
+        .eq('organization_id', organization.id).order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((item) => {
+        const person = item.profiles as unknown as Record<string, string>;
+        const donation = item.donations as unknown as Record<string, string | number> | null;
+        return { id: item.id, organizationId: item.organization_id, donationId: item.donation_id, organizationName: person['full_name'],
+          organizationType: 'beneficiary' as const, address: '', city: '', phone: person['phone'], email: person['email'],
+          requestType: item.request_type as 'membership' | 'ration', status: item.status as 'pending' | 'approved' | 'rejected',
+          preferredDate: item.preferred_date, scheduledAt: item.scheduled_at, message: item.message, createdAt: item.created_at,
+          foodName: donation?.['food_name'] as string | null ?? null, quantity: donation ? Number(donation['quantity']) : null,
+          unit: donation?.['unit'] as string | null ?? null, pickupStartsAt: donation?.['pickup_starts_at'] as string | null ?? null,
+          pickupEndsAt: donation?.['pickup_ends_at'] as string | null ?? null };
+      });
+    })());
+  }
+
+  reviewOrganizationAidRequest(id: string, status: 'approved' | 'rejected', scheduledAt: string | null, responseMessage: string): Observable<void> {
+    return from((async () => {
+      const { error } = await this.supabase.from('individual_aid_requests').update({
+        status, scheduled_at: scheduledAt, response_message: responseMessage.trim() || null,
+      }).eq('id', id);
+      if (error) throw error;
+    })());
+  }
 
   loadBeneficiaryDashboard(): Observable<BeneficiaryDashboardSnapshot> {
     return from((async () => {

@@ -459,7 +459,7 @@ export class AdminPage {
   setUserSearch(event: Event): void { this.userSearch.set((event.target as HTMLInputElement).value); }
   setUserRoleFilter(event: Event): void { this.userRoleFilter.set((event.target as HTMLSelectElement).value as 'all' | AppRole); }
   setUserStatusFilter(event: Event): void { this.userStatusFilter.set((event.target as HTMLSelectElement).value as 'all' | 'active' | 'inactive' | 'pending'); }
-  roleLabel(role: AppRole): string { return ({ admin: 'Administracion', donor: 'Donante', beneficiary: 'Beneficiario', volunteer: 'Voluntariado' })[role]; }
+  roleLabel(role: AppRole): string { return ({ admin: 'Administracion', donor: 'Donante', beneficiary: 'Organización beneficiaria', volunteer: 'Voluntariado', person: 'Personas necesitadas' })[role]; }
   statusLabel(status: string): string { return ({ active: 'Activo', inactive: 'Inactivo', pending: 'Pendiente' })[status as 'active' | 'inactive' | 'pending'] ?? status; }
   registrationDate(value: string): string { return new Date(value).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }); }
 

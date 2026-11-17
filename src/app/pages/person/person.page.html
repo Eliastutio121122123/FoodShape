@@ -1,0 +1,60 @@
+<main class="person-app">
+  <header class="topbar"><a class="brand" routerLink="/">FoodShare</a><div><span>Personas necesitadas</span><a routerLink="/app/profile">Mi perfil</a></div></header>
+  <div class="person-layout">
+    <aside class="sidebar"><span class="eyebrow">MI APOYO ALIMENTARIO</span><h2>Hola, {{ name() }}</h2><p>Encuentra alimentos y coordina cuándo recibirlos.</p>
+      <nav aria-label="Menú de personas necesitadas">
+        <button type="button" [class.active]="section() === 'offers'" (click)="section.set('offers')">Comida disponible <b>{{ foodOffers().length }}</b></button>
+        <button type="button" [class.active]="section() === 'organizations'" (click)="section.set('organizations')">Quiénes pueden ayudar</button>
+        <button type="button" [class.active]="section() === 'join'" (click)="section.set('join')">Mis solicitudes para unirme <b>{{ joinRequests().length }}</b></button>
+        <button type="button" [class.active]="section() === 'rations'" (click)="section.set('rations')">Mis raciones y encuentros <b>{{ rationRequests().length }}</b></button>
+      </nav>
+      @if (upcomingRations().length) { <div class="next-meal"><span>PRÓXIMO ENCUENTRO</span><strong>{{ upcomingRations()[0].foodName || 'Entrega de alimentos' }}</strong><small>{{ formatDate(upcomingRations()[0].scheduledAt) }}</small><small>{{ upcomingRations()[0].organizationName }}</small></div> }
+      <div class="help"><strong>¿Necesitas ayuda pronto?</strong><p>Contacta directamente a la organización para confirmar qué alimentos tiene disponibles y cómo recibirlos.</p></div>
+    </aside>
+
+    <section class="content">
+      @if (section() === 'offers') {
+        <div class="heading"><span class="eyebrow">ALIMENTOS CERCA DE TI</span><h1>Comida disponible</h1><p>Revisa quién ofrece alimentos, dónde recogerlos y en qué horario. Solicita una ración para coordinar la entrega.</p></div>
+        <div class="filter"><label for="city-filter">Tu ciudad</label><input id="city-filter" [value]="searchCity()" (input)="setCity($event)" placeholder="Ej. Santo Domingo" /><button type="button" (click)="reload()">Buscar</button></div>
+        @if (message()) { <p class="success" role="status">{{ message() }}</p> } @if (requestError()) { <p class="error" role="alert">{{ requestError() }}</p> }
+        @if (loading()) { <div class="empty">Buscando alimentos disponibles…</div> }
+        @else if (error()) { <div class="empty error">{{ error() }} <button type="button" (click)="reload()">Intentar de nuevo</button></div> }
+        @else if (foodOffers().length) {
+          <div class="offer-grid">@for (offer of foodOffers(); track offer.id) {
+            <article class="offer-card"><div class="offer-top"><span class="food-icon">♡</span><span class="tag">{{ offer.categoryName }}</span></div><h2>{{ offer.foodName }}</h2><p class="food-quantity">{{ offer.quantity }} {{ offer.unit }}</p>
+              <p class="provider">Ofrecida por <strong>{{ offer.organizationName }}</strong></p><p class="pickup"><b>Punto de recogida</b><a [href]="mapUrl(offer)" target="_blank" rel="noopener">{{ offer.address }}, {{ offer.city }} · Ver mapa</a></p>
+              <div class="pickup-times"><span><b>Recoger desde</b>{{ formatDate(offer.pickupStartsAt) }}</span><span><b>Hasta</b>{{ formatDate(offer.pickupEndsAt) }}</span></div>
+              <p class="expires">Disponible hasta {{ formatDate(offer.expiresAt) }}</p><div class="contact"><a [href]="'tel:' + offer.phone">Llamar · {{ offer.phone }}</a><a [href]="'mailto:' + offer.email">Escribir</a></div>
+              <label class="date-label">Fecha preferida <input type="date" [value]="preferredDates()[offer.id] || ''" (change)="setDate(offer.id, $event)" /></label>
+              <button type="button" class="primary request-food" [disabled]="hasFoodRequest(offer.id) || sending() === offer.id + ':food'" (click)="requestFood(offer)">{{ hasFoodRequest(offer.id) ? 'Solicitud enviada' : sending() === offer.id + ':food' ? 'Enviando…' : 'Solicitar esta ración' }}</button>
+            </article>
+          }</div>
+        } @else { <div class="empty"><strong>No hay donaciones disponibles ahora</strong><p>Busca organizaciones de apoyo o vuelve a revisar pronto.</p><button type="button" (click)="section.set('organizations')">Ver organizaciones</button></div> }
+      } @else if (section() === 'organizations') {
+        <div class="heading"><span class="eyebrow">RED DE APOYO</span><h1>Quiénes pueden ayudarte</h1><p>Contacta organizaciones donantes y beneficiarias, conoce su dirección y solicita apoyo.</p></div>
+        <div class="filter"><label for="org-city-filter">Filtrar por ciudad</label><input id="org-city-filter" [value]="searchCity()" (input)="setCity($event)" placeholder="Ej. Santo Domingo" /><button type="button" (click)="reload()">Buscar</button></div>
+        @if (message()) { <p class="success" role="status">{{ message() }}</p> } @if (requestError()) { <p class="error" role="alert">{{ requestError() }}</p> }
+        @if (loading()) { <div class="empty">Cargando organizaciones…</div> }
+        @else if (error()) { <div class="empty error">{{ error() }} <button type="button" (click)="reload()">Intentar de nuevo</button></div> }
+        @else if (organizations().length) { <div class="org-grid">@for (org of organizations(); track org.id) {
+          <article class="org-card"><div class="org-top"><span class="org-icon">{{ org.organizationType === 'donor' ? '✦' : '♡' }}</span><span class="tag">{{ org.organizationType === 'donor' ? 'Organización donante' : 'Organización beneficiaria' }}</span></div>
+            <h2>{{ org.name }}</h2><p class="type">{{ org.profileType || 'Organización verificada' }}</p><a class="address" [href]="mapUrl(org)" target="_blank" rel="noopener">⌖ {{ org.address }}, {{ org.city }} <span>Ver mapa</span></a>
+            <div class="contact"><a [href]="'tel:' + org.phone">Llamar · {{ org.phone }}</a><a [href]="'mailto:' + org.email">Enviar correo</a></div>
+            <div class="actions"><button type="button" class="primary" [disabled]="hasRequest(org.id, 'ration') || sending() === org.id + ':ration'" (click)="request(org, 'ration')">{{ hasRequest(org.id, 'ration') ? 'Ración solicitada' : sending() === org.id + ':ration' ? 'Enviando…' : 'Pedir apoyo' }}</button><button type="button" class="secondary" [disabled]="hasRequest(org.id, 'membership') || sending() === org.id + ':membership'" (click)="request(org, 'membership')">{{ hasRequest(org.id, 'membership') ? 'Solicitud enviada' : 'Quiero unirme' }}</button></div>
+            <label class="date-label">Fecha preferida para recibir <input type="date" [value]="preferredDates()[org.id] || ''" (change)="setDate(org.id, $event)" /></label>
+          </article>
+        }</div> } @else { <div class="empty">No encontramos organizaciones activas en esa ciudad.</div> }
+      } @else if (section() === 'join') {
+        <div class="heading"><span class="eyebrow">SEGUIMIENTO</span><h1>Mis solicitudes para unirme</h1><p>Consulta las respuestas y comunícate con las organizaciones.</p></div>
+        @for (item of joinRequests(); track item.id) { <article class="request-card"><div><strong>{{ item.organizationName }}</strong><span>{{ requestLabel(item.requestType) }} · {{ statusLabel(item.status) }}</span></div><a [href]="'tel:' + item.phone">Llamar</a><a [href]="'mailto:' + item.email">Correo</a></article> } @empty { <div class="empty">Aún no has enviado solicitudes para unirte. Busca una organización de apoyo.</div> }
+      } @else {
+        <div class="heading"><span class="eyebrow">MIS ENTREGAS Y ENCUENTROS</span><h1>Mis raciones y encuentros</h1><p>Aquí aparecen tus solicitudes, las fechas acordadas y los lugares donde recibir tus alimentos.</p></div>
+        @for (item of rationRequests(); track item.id) { <article class="ration-card"><div class="ration-head"><div><strong>{{ item.foodName || 'Ración de alimentos' }}</strong><span>Ofrecida por {{ item.organizationName }} · {{ item.organizationType === 'donor' ? 'Organización donante' : 'Organización beneficiaria' }}</span></div><b [class.approved]="item.status === 'approved'">{{ statusLabel(item.status) }}</b></div>
+          @if (item.quantity) { <p><strong>Cantidad:</strong> {{ item.quantity }} {{ item.unit }}</p> }<p><strong>Encuentro / recogida:</strong> {{ formatDate(item.scheduledAt || item.pickupStartsAt) }}@if (item.pickupEndsAt) { – {{ formatDate(item.pickupEndsAt) }} }</p>
+          @if (item.preferredDate) { <p><strong>Fecha que solicitaste:</strong> {{ formatDate(item.preferredDate) }}</p> }<p><strong>Lugar de recogida:</strong> <a [href]="mapUrl(item)" target="_blank" rel="noopener">{{ item.address }}, {{ item.city }}</a></p>
+          <div class="contact"><a [href]="'tel:' + item.phone">Llamar · {{ item.phone }}</a><a [href]="'mailto:' + item.email">Enviar correo</a></div>
+        </article> } @empty { <div class="empty">Todavía no tienes raciones coordinadas. Revisa la comida disponible para solicitar una.</div> }
+      }
+    </section>
+  </div>
+</main>

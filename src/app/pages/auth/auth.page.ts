@@ -5,7 +5,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 import { AppRole, AuthService } from '../../services/auth.service';
 
-type RegistrationRole = 'donor' | 'beneficiary' | 'volunteer';
+type RegistrationRole = 'donor' | 'beneficiary' | 'volunteer' | 'person';
 
 const phonePattern = /^(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?){2}\d{4}$/;
 const rncPattern = /^\d{3}-?\d{5}-?\d$/;
@@ -80,6 +80,13 @@ export class AuthPage {
     availabilityZone: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(100)]],
     volunteerAgreement: [false, Validators.requiredTrue],
   });
+  readonly personForm = this.formBuilder.group({
+    fullName: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(150)]],
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
+    phone: ['', [Validators.required, Validators.pattern(phonePattern)]],
+    city: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
+  });
 
   constructor() {
     this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef))
@@ -138,13 +145,15 @@ export class AuthPage {
   submitRegistration(role: RegistrationRole): void {
     this.registrationMessage.set('');
     this.registrationError.set('');
-    let form: typeof this.donorForm | typeof this.beneficiaryForm | typeof this.volunteerForm;
+    let form: typeof this.donorForm | typeof this.beneficiaryForm | typeof this.volunteerForm | typeof this.personForm;
     if (role === 'beneficiary') {
       this.setOtherValidation(this.beneficiaryForm.controls.otherInstitutionType, this.beneficiaryForm.controls.institutionType.value === 'other');
       form = this.beneficiaryForm;
     } else if (role === 'volunteer') {
       this.setOtherValidation(this.volunteerForm.controls.otherTransportType, this.volunteerForm.controls.transportType.value === 'other');
       form = this.volunteerForm;
+    } else if (role === 'person') {
+      form = this.personForm;
     } else {
       form = this.donorForm;
     }
@@ -159,6 +168,9 @@ export class AuthPage {
       const profile = this.beneficiaryForm.getRawValue();
       const institutionTypes: Record<string, string> = { community_dining: 'Comedor comunitario', foundation: 'Fundación', ngo: 'ONG', food_bank: 'Banco de alimentos' };
       payload = { role, email: profile.email, password: profile.password, fullName: profile.representativeName, organizationName: profile.organizationName, rnc: profile.rnc, phone: profile.phone, address: profile.address, city: profile.city, profileType: profile.institutionType === 'other' ? profile.otherInstitutionType : profile.institutionType };
+    } else if (role === 'person') {
+      const profile = this.personForm.getRawValue();
+      payload = { role, email: profile.email, password: profile.password, fullName: profile.fullName, phone: profile.phone, city: profile.city };
     } else {
       const profile = this.volunteerForm.getRawValue();
       payload = { role, email: profile.email, password: profile.password, fullName: profile.fullName, phone: profile.phone, transportType: profile.transportType, otherTransportType: profile.otherTransportType, availabilityZone: profile.availabilityZone, agreementAccepted: profile.volunteerAgreement };
@@ -171,7 +183,7 @@ export class AuthPage {
     });
   }
 
-  isInvalid(controlName: string, form: 'login' | 'donor' | 'beneficiary' | 'volunteer'): boolean {
+  isInvalid(controlName: string, form: 'login' | 'donor' | 'beneficiary' | 'volunteer' | 'person'): boolean {
     const control = this.getForm(form).get(controlName);
     return Boolean(control?.invalid && (control.touched || this.submitted()));
   }
@@ -179,13 +191,13 @@ export class AuthPage {
   showOtherInstitutionType(): boolean { return this.beneficiaryForm.controls.institutionType.value === 'other'; }
   showOtherTransportType(): boolean { return this.volunteerForm.controls.transportType.value === 'other'; }
 
-  private submit(form: typeof this.loginForm | typeof this.donorForm | typeof this.beneficiaryForm | typeof this.volunteerForm): void {
+  private submit(form: typeof this.loginForm | typeof this.donorForm | typeof this.beneficiaryForm | typeof this.volunteerForm | typeof this.personForm): void {
     this.submitted.set(true);
     form.markAllAsTouched();
   }
 
-  private getForm(form: 'login' | 'donor' | 'beneficiary' | 'volunteer'): FormGroup {
-    return form === 'login' ? this.loginForm : form === 'donor' ? this.donorForm : form === 'beneficiary' ? this.beneficiaryForm : this.volunteerForm;
+  private getForm(form: 'login' | 'donor' | 'beneficiary' | 'volunteer' | 'person'): FormGroup {
+    return form === 'login' ? this.loginForm : form === 'donor' ? this.donorForm : form === 'beneficiary' ? this.beneficiaryForm : form === 'person' ? this.personForm : this.volunteerForm;
   }
 
   private setOtherValidation(control: typeof this.beneficiaryForm.controls.otherInstitutionType, required: boolean): void {

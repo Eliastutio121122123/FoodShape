@@ -34,7 +34,7 @@
       @if (section() === 'users') {
         <section class="page-title"><div><span class="eyebrow">GESTI&#211;N DE USUARIOS</span><h1>Usuarios de FoodShare</h1><p>Consulta los perfiles registrados en la plataforma.</p></div></section>
         <section class="toolbar"><label>&#8981; <input placeholder="Buscar por nombre o correo" [value]="userSearch()" (input)="setUserSearch($event)" /></label>
-          <select aria-label="Filtrar por rol" (change)="setUserRoleFilter($event)"><option value="all">Todos los roles</option><option value="admin">Administraci&#243;n</option><option value="donor">Donante</option><option value="beneficiary">Beneficiario</option><option value="volunteer">Voluntariado</option></select>
+          <select aria-label="Filtrar por rol" (change)="setUserRoleFilter($event)"><option value="all">Todos los roles</option><option value="admin">Administraci&#243;n</option><option value="donor">Donante</option><option value="beneficiary">Organizaci&#243;n beneficiaria</option><option value="volunteer">Voluntariado</option><option value="person">Personas necesitadas</option></select>
           <select aria-label="Filtrar por estado" (change)="setUserStatusFilter($event)"><option value="all">Todos los estados</option><option value="active">Activos</option><option value="inactive">Inactivos</option><option value="pending">Pendientes</option></select>
         </section>
         @if (usersError()) { <p class="admin-error" role="alert">{{ usersError() }}</p> }

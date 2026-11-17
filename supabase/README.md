@@ -6,10 +6,11 @@ La aplicación usa Supabase Auth para correo/contraseña y Google, y PostgreSQL 
 
 1. Crea un proyecto en Supabase y copia el Project URL y la llave **Publishable** (`sb_publishable_...`).
 2. En el Dashboard abre **SQL Editor**, pega y ejecuta el contenido de `migrations/20261020000000_foodshare_initial.sql`.
-3. Copia `.env.example` a `.env` y sustituye `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` con esos valores.
-4. Configura Authentication → URL Configuration: Site URL `http://localhost:8100` y Redirect URLs `http://localhost:8100/login` y `http://127.0.0.1:8100/login`.
-5. Para Google, habilita el proveedor Google en Authentication → Sign In / Providers y sigue el callback URI que muestra Supabase en la consola OAuth de Google. No necesitas un endpoint Google propio en FoodShare.
-6. Arranca la aplicación con `docker compose up --build`. Abre `http://localhost:8100`.
+3. Aplica también las migraciones posteriores de `migrations/` en orden para habilitar los cambios recientes, incluida `20261117090000_individual_beneficiaries.sql` para cuentas personales que solicitan alimentos. Si el proyecto ya está vinculado con Supabase CLI, desde la raíz del repositorio ejecuta `npx supabase db push`.
+4. Copia `.env.example` a `.env` y sustituye `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` con esos valores.
+5. Configura Authentication → URL Configuration: Site URL `http://localhost:8100` y Redirect URLs `http://localhost:8100/login` y `http://127.0.0.1:8100/login`.
+6. Para Google, habilita el proveedor Google en Authentication → Sign In / Providers y sigue el callback URI que muestra Supabase en la consola OAuth de Google. No necesitas un endpoint Google propio en FoodShare.
+7. Arranca la aplicación con `docker compose up --build`. Abre `http://localhost:8100`.
 
 ## Conectar este repositorio con la integración GitHub de Supabase
 
@@ -18,6 +19,8 @@ El repositorio Git ya tiene el remoto `Eliastutio121122123/FoodShare` y el direc
 Supabase observa commits y aplica migraciones nuevas que encuentre en `supabase/migrations`. Al conectarla, revisa cuidadosamente la primera ejecución para confirmar que la migración corresponde a una base nueva o que el historial remoto está alineado; no es una sincronización que copie datos de SQL Server. Las ramas de preview de Supabase son opcionales y requieren Branching habilitado en el plan del proyecto.
 
 El registro de voluntarios queda activo al confirmar la cuenta. Los registros de organizaciones se crean pendientes y no pueden entrar al panel hasta su aprobación por un administrador. Al aprobar una organización, la base confirma también el correo de Auth de su propietario, de modo que pueda iniciar sesión sin esperar el enlace de confirmación.
+
+Las personas que solicitan alimentos se registran con el perfil personal `person`. Pueden consultar organizaciones aprobadas, contactarlas, solicitar unirse o pedir una ración. Las organizaciones gestionan estas solicitudes en **Solicitudes de apoyo personal** y pueden fijar fecha y hora para una ración.
 
 ## Crear el primer administrador
 

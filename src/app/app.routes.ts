@@ -21,6 +21,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/beneficiary/beneficiary.page').then((m) => m.BeneficiaryPage),
   },
   {
+    path: 'app/person',
+    canActivate: [roleGuard],
+    data: { role: 'person' },
+    loadComponent: () => import('./pages/person/person.page').then((m) => m.PersonPage),
+  },
+  {
     path: 'app/donor',
     canActivate: [roleGuard],
     data: { role: 'donor' },
@@ -42,6 +48,11 @@ export const routes: Routes = [
     path: 'app/profile',
     canActivate: [roleGuard],
     loadComponent: () => import('./pages/profile/profile.page').then((m) => m.ProfilePage),
+  },
+  {
+    path: 'app/aid-requests',
+    canActivate: [roleGuard],
+    loadComponent: () => import('./pages/aid-requests/aid-requests.page').then((m) => m.AidRequestsPage),
   },
   {
     path: 'app/:role',
