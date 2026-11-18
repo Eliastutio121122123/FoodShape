@@ -5,6 +5,7 @@
       <nav aria-label="Menú de personas necesitadas">
         <button type="button" [class.active]="section() === 'offers'" (click)="section.set('offers')">Comida disponible <b>{{ foodOffers().length }}</b></button>
         <button type="button" [class.active]="section() === 'organizations'" (click)="section.set('organizations')">Quiénes pueden ayudar</button>
+        <button type="button" (click)="openInbox()">Mensajes</button>
         <button type="button" [class.active]="section() === 'join'" (click)="section.set('join')">Mis solicitudes para unirme <b>{{ joinRequests().length }}</b></button>
         <button type="button" [class.active]="section() === 'rations'" (click)="section.set('rations')">Mis raciones y encuentros <b>{{ rationRequests().length }}</b></button>
       </nav>
@@ -16,7 +17,7 @@
       @if (section() === 'offers') {
         <div class="heading"><span class="eyebrow">ALIMENTOS CERCA DE TI</span><h1>Comida disponible</h1><p>Revisa quién ofrece alimentos, dónde recogerlos y en qué horario. Solicita una ración para coordinar la entrega.</p></div>
         <div class="filter"><label for="city-filter">Tu ciudad</label><input id="city-filter" [value]="searchCity()" (input)="setCity($event)" placeholder="Ej. Santo Domingo" /><button type="button" (click)="reload()">Buscar</button></div>
-        @if (message()) { <p class="success" role="status">{{ message() }}</p> } @if (requestError()) { <p class="error" role="alert">{{ requestError() }}</p> }
+        @if (message()) { <p class="success" role="status">{{ message() }}</p> } @if (requestError()) { <p class="error" role="alert">{{ requestError() }}</p> } @if (chatError()) { <p class="error" role="alert">{{ chatError() }}</p> }
         @if (loading()) { <div class="empty">Buscando alimentos disponibles…</div> }
         @else if (error()) { <div class="empty error">{{ error() }} <button type="button" (click)="reload()">Intentar de nuevo</button></div> }
         @else if (foodOffers().length) {
@@ -24,7 +25,7 @@
             <article class="offer-card"><div class="offer-top"><span class="food-icon">♡</span><span class="tag">{{ offer.categoryName }}</span></div><h2>{{ offer.foodName }}</h2><p class="food-quantity">{{ offer.quantity }} {{ offer.unit }}</p>
               <p class="provider">Ofrecida por <strong>{{ offer.organizationName }}</strong></p><p class="pickup"><b>Punto de recogida</b><a [href]="mapUrl(offer)" target="_blank" rel="noopener">{{ offer.address }}, {{ offer.city }} · Ver mapa</a></p>
               <div class="pickup-times"><span><b>Recoger desde</b>{{ formatDate(offer.pickupStartsAt) }}</span><span><b>Hasta</b>{{ formatDate(offer.pickupEndsAt) }}</span></div>
-              <p class="expires">Disponible hasta {{ formatDate(offer.expiresAt) }}</p><div class="contact"><a [href]="'tel:' + offer.phone">Llamar · {{ offer.phone }}</a><a [href]="'mailto:' + offer.email">Escribir</a></div>
+              <p class="expires">Disponible hasta {{ formatDate(offer.expiresAt) }}</p><div class="contact"><a [href]="'tel:' + offer.phone">Llamar · {{ offer.phone }}</a><button type="button" (click)="openChat(offer.organizationId)">Chatear</button></div>
               <label class="date-label">Fecha preferida <input type="date" [value]="preferredDates()[offer.id] || ''" (change)="setDate(offer.id, $event)" /></label>
               <button type="button" class="primary request-food" [disabled]="hasFoodRequest(offer.id) || sending() === offer.id + ':food'" (click)="requestFood(offer)">{{ hasFoodRequest(offer.id) ? 'Solicitud enviada' : sending() === offer.id + ':food' ? 'Enviando…' : 'Solicitar esta ración' }}</button>
             </article>
@@ -33,28 +34,51 @@
       } @else if (section() === 'organizations') {
         <div class="heading"><span class="eyebrow">RED DE APOYO</span><h1>Quiénes pueden ayudarte</h1><p>Contacta organizaciones donantes y beneficiarias, conoce su dirección y solicita apoyo.</p></div>
         <div class="filter"><label for="org-city-filter">Filtrar por ciudad</label><input id="org-city-filter" [value]="searchCity()" (input)="setCity($event)" placeholder="Ej. Santo Domingo" /><button type="button" (click)="reload()">Buscar</button></div>
-        @if (message()) { <p class="success" role="status">{{ message() }}</p> } @if (requestError()) { <p class="error" role="alert">{{ requestError() }}</p> }
+        @if (message()) { <p class="success" role="status">{{ message() }}</p> } @if (requestError()) { <p class="error" role="alert">{{ requestError() }}</p> } @if (chatError()) { <p class="error" role="alert">{{ chatError() }}</p> }
         @if (loading()) { <div class="empty">Cargando organizaciones…</div> }
         @else if (error()) { <div class="empty error">{{ error() }} <button type="button" (click)="reload()">Intentar de nuevo</button></div> }
         @else if (organizations().length) { <div class="org-grid">@for (org of organizations(); track org.id) {
           <article class="org-card"><div class="org-top"><span class="org-icon">{{ org.organizationType === 'donor' ? '✦' : '♡' }}</span><span class="tag">{{ org.organizationType === 'donor' ? 'Organización donante' : 'Organización beneficiaria' }}</span></div>
-            <h2>{{ org.name }}</h2><p class="type">{{ org.profileType || 'Organización verificada' }}</p><a class="address" [href]="mapUrl(org)" target="_blank" rel="noopener">⌖ {{ org.address }}, {{ org.city }} <span>Ver mapa</span></a>
-            <div class="contact"><a [href]="'tel:' + org.phone">Llamar · {{ org.phone }}</a><a [href]="'mailto:' + org.email">Enviar correo</a></div>
+            <h2>{{ org.name }}</h2><p class="type">{{ org.profileType || 'Organización verificada' }}</p><button type="button" class="profile-link" (click)="viewOrganization(org)">Ver perfil de la organización</button><a class="address" [href]="mapUrl(org)" target="_blank" rel="noopener">⌖ {{ org.address }}, {{ org.city }} <span>Ver mapa</span></a>
+            <div class="contact"><a [href]="'tel:' + org.phone">Llamar · {{ org.phone }}</a></div>
             <div class="actions"><button type="button" class="primary" [disabled]="hasRequest(org.id, 'ration') || sending() === org.id + ':ration'" (click)="request(org, 'ration')">{{ hasRequest(org.id, 'ration') ? 'Ración solicitada' : sending() === org.id + ':ration' ? 'Enviando…' : 'Pedir apoyo' }}</button><button type="button" class="secondary" [disabled]="hasRequest(org.id, 'membership') || sending() === org.id + ':membership'" (click)="request(org, 'membership')">{{ hasRequest(org.id, 'membership') ? 'Solicitud enviada' : 'Quiero unirme' }}</button></div>
+            <button type="button" class="chat-action" [disabled]="chatOpening() === org.id" (click)="openChat(org.id)">{{ chatOpening() === org.id ? 'Abriendo chat…' : 'Hablar por FoodShare' }}</button>
             <label class="date-label">Fecha preferida para recibir <input type="date" [value]="preferredDates()[org.id] || ''" (change)="setDate(org.id, $event)" /></label>
           </article>
         }</div> } @else { <div class="empty">No encontramos organizaciones activas en esa ciudad.</div> }
       } @else if (section() === 'join') {
         <div class="heading"><span class="eyebrow">SEGUIMIENTO</span><h1>Mis solicitudes para unirme</h1><p>Consulta las respuestas y comunícate con las organizaciones.</p></div>
-        @for (item of joinRequests(); track item.id) { <article class="request-card"><div><strong>{{ item.organizationName }}</strong><span>{{ requestLabel(item.requestType) }} · {{ statusLabel(item.status) }}</span></div><a [href]="'tel:' + item.phone">Llamar</a><a [href]="'mailto:' + item.email">Correo</a></article> } @empty { <div class="empty">Aún no has enviado solicitudes para unirte. Busca una organización de apoyo.</div> }
+        @for (item of joinRequests(); track item.id) { <article class="request-card"><div><strong>{{ item.organizationName }}</strong><span>{{ requestLabel(item.requestType) }} · {{ statusLabel(item.status) }}</span></div><a [href]="'tel:' + item.phone">Llamar</a><button type="button" class="chat-action" (click)="openChat(item.organizationId)">Abrir chat</button></article> } @empty { <div class="empty">Aún no has enviado solicitudes para unirte. Busca una organización de apoyo.</div> }
       } @else {
         <div class="heading"><span class="eyebrow">MIS ENTREGAS Y ENCUENTROS</span><h1>Mis raciones y encuentros</h1><p>Aquí aparecen tus solicitudes, las fechas acordadas y los lugares donde recibir tus alimentos.</p></div>
         @for (item of rationRequests(); track item.id) { <article class="ration-card"><div class="ration-head"><div><strong>{{ item.foodName || 'Ración de alimentos' }}</strong><span>Ofrecida por {{ item.organizationName }} · {{ item.organizationType === 'donor' ? 'Organización donante' : 'Organización beneficiaria' }}</span></div><b [class.approved]="item.status === 'approved'">{{ statusLabel(item.status) }}</b></div>
           @if (item.quantity) { <p><strong>Cantidad:</strong> {{ item.quantity }} {{ item.unit }}</p> }<p><strong>Encuentro / recogida:</strong> {{ formatDate(item.scheduledAt || item.pickupStartsAt) }}@if (item.pickupEndsAt) { – {{ formatDate(item.pickupEndsAt) }} }</p>
           @if (item.preferredDate) { <p><strong>Fecha que solicitaste:</strong> {{ formatDate(item.preferredDate) }}</p> }<p><strong>Lugar de recogida:</strong> <a [href]="mapUrl(item)" target="_blank" rel="noopener">{{ item.address }}, {{ item.city }}</a></p>
-          <div class="contact"><a [href]="'tel:' + item.phone">Llamar · {{ item.phone }}</a><a [href]="'mailto:' + item.email">Enviar correo</a></div>
+          <div class="contact"><a [href]="'tel:' + item.phone">Llamar · {{ item.phone }}</a><button type="button" (click)="openChat(item.organizationId)">Abrir chat</button></div>
         </article> } @empty { <div class="empty">Todavía no tienes raciones coordinadas. Revisa la comida disponible para solicitar una.</div> }
       }
     </section>
   </div>
+  @if (selectedOrganization(); as org) {
+    <div class="organization-profile-backdrop" (click)="closeOrganizationProfile()">
+      <section class="organization-profile" role="dialog" aria-modal="true" aria-labelledby="organization-profile-title" (click)="$event.stopPropagation()">
+        <button type="button" class="profile-close" aria-label="Cerrar perfil" (click)="closeOrganizationProfile()">×</button>
+        <div class="profile-heading"><span class="org-icon">{{ org.organizationType === 'donor' ? '✦' : '♡' }}</span><span class="tag">{{ org.organizationType === 'donor' ? 'Organización donante' : 'Organización beneficiaria' }}</span></div>
+        <p class="eyebrow">PERFIL DE LA ORGANIZACIÓN</p>
+        <h2 id="organization-profile-title">{{ org.name }}</h2>
+        <p class="profile-type">{{ org.profileType || 'Organización verificada' }}</p>
+        <dl class="profile-details">
+          <div><dt>Dirección</dt><dd>{{ org.address || 'No disponible' }}</dd></div>
+          <div><dt>Ciudad</dt><dd>{{ org.city || 'No disponible' }}</dd></div>
+          <div><dt>Teléfono</dt><dd>{{ org.phone || 'No disponible' }}</dd></div>
+          <div><dt>Correo electrónico</dt><dd>{{ org.email || 'No disponible' }}</dd></div>
+        </dl>
+        <div class="profile-actions">
+          @if (org.address || org.city) { <a class="secondary profile-map" [href]="mapUrl(org)" target="_blank" rel="noopener">Abrir ubicación en el mapa</a> }
+          @if (org.phone) { <a class="primary" [href]="'tel:' + org.phone">Llamar</a> }
+          <button type="button" class="secondary" (click)="closeOrganizationProfile(); openChat(org.id)">Hablar por FoodShare</button>
+        </div>
+      </section>
+    </div>
+  }
 </main>

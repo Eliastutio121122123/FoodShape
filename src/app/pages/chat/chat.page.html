@@ -1,0 +1,53 @@
+<main class="chat-app">
+  <header class="chat-topbar">
+    <a class="chat-brand" routerLink="/"><img src="assets/foodshare-logo.png" alt="FoodShare" /></a>
+    <a class="back-to-panel" [routerLink]="backToPanel()">Volver al panel</a>
+  </header>
+
+  <section class="chat-workspace" aria-label="Mensajes de FoodShare">
+    <aside class="conversation-list" [class.mobile-hidden]="selectedId() !== null">
+      <div class="inbox-heading"><span class="eyebrow">CONTACTO DIRECTO</span><h1>Mensajes</h1><p>Coordina apoyo y entregas desde FoodShare.</p></div>
+      @if (inboxLoading()) { <div class="inbox-state">Cargando conversaciones…</div> }
+      @else if (conversations().length) {
+        <nav aria-label="Tus conversaciones">
+          @for (conversation of conversations(); track conversation.id) {
+            <button type="button" class="conversation-item" [class.active]="selectedId() === conversation.id" (click)="selectConversation(conversation)">
+              <span class="conversation-avatar">{{ conversation.otherParticipantName.slice(0, 1).toUpperCase() }}</span>
+              <span class="conversation-copy"><strong>{{ conversation.otherParticipantName }}</strong><small>{{ roleLabel(conversation) }}</small><small class="preview">{{ conversation.lastMessage || 'Inicia la conversación' }}</small></span>
+              @if (conversation.lastMessageAt) { <time>{{ formatMessageTime(conversation.lastMessageAt) }}</time> }
+            </button>
+          }
+        </nav>
+      } @else if (!inboxError()) {
+        <div class="inbox-state"><span class="empty-icon">♡</span><strong>Aún no tienes conversaciones</strong><p>Abre una organización o una solicitud y empieza a coordinar por aquí.</p><a [routerLink]="backToPanel()">Volver al panel</a></div>
+      } @else { <div class="inbox-state error-state"><strong>No pudimos cargar tus conversaciones</strong><p>{{ inboxError() }}</p><button type="button" (click)="loadInbox()">Intentar de nuevo</button></div> }
+    </aside>
+
+    <section class="chat-panel" [class.mobile-hidden]="selectedId() === null" aria-label="Conversación">
+      @if (threadLoading()) { <div class="chat-state">Abriendo conversación…</div> }
+      @else if (thread(); as activeThread) {
+        <header class="thread-heading">
+          <a class="mobile-back" routerLink="/app/chat" aria-label="Volver a conversaciones">←</a>
+          <span class="conversation-avatar">{{ activeThread.conversation.otherParticipantName.slice(0, 1).toUpperCase() }}</span>
+          <div><h2>{{ activeThread.conversation.otherParticipantName }}</h2><p>{{ roleLabel(activeThread.conversation) }}</p></div>
+          <span class="secure-note">Conversación privada</span>
+        </header>
+        <div class="message-list" aria-live="polite" aria-relevant="additions text">
+          @if (activeThread.messages.length === 0) { <div class="first-message"><span class="empty-icon">✦</span><strong>Empieza la conversación</strong><p>Comparte lo que necesitas coordinar. Solo los participantes de esta conversación pueden leer estos mensajes.</p></div> }
+          @for (message of activeThread.messages; track message.id) {
+            <article class="message-bubble" [class.mine]="message.senderId === activeThread.currentUserId">
+              <p>{{ message.content }}</p><time>{{ formatMessageTime(message.createdAt) }}</time>
+            </article>
+          }
+        </div>
+        @if (error()) { <p class="chat-error" role="alert">{{ error() }}</p> }
+        <form class="composer" (submit)="send($event)">
+          <label class="sr-only" for="chat-draft">Escribe un mensaje</label>
+          <textarea id="chat-draft" rows="2" maxlength="2000" [value]="draft()" (input)="updateDraft($event)" placeholder="Escribe un mensaje…" [disabled]="sending()"></textarea>
+          <div class="composer-footer"><small>{{ draft().length }}/2000 · Solo texto</small><button type="submit" [disabled]="!draft().trim() || sending()">{{ sending() ? 'Enviando…' : 'Enviar mensaje' }} <span aria-hidden="true">↗</span></button></div>
+        </form>
+      } @else if (error()) { <div class="chat-state error-state"><strong>No pudimos abrir el chat</strong><p>{{ error() }}</p><button type="button" (click)="loadThread(selectedId()!)">Intentar de nuevo</button></div> }
+      @else { <div class="chat-state welcome-state"><span class="empty-icon">♡</span><h2>Habla directamente desde FoodShare</h2><p>Selecciona una conversación o inicia una desde el directorio de organizaciones.</p></div> }
+    </section>
+  </section>
+</main>

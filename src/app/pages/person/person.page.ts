@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService, CommunityOrganization, PersonalAidRequest, PersonalFoodOffer } from '../../services/auth.service';
 
 type PersonSection = 'offers' | 'organizations' | 'join' | 'rations';
@@ -12,8 +12,10 @@ type PersonSection = 'offers' | 'organizations' | 'join' | 'rations';
 })
 export class PersonPage {
   private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
   readonly section = signal<PersonSection>('offers');
   readonly organizations = signal<CommunityOrganization[]>([]);
+  readonly selectedOrganization = signal<CommunityOrganization | null>(null);
   readonly foodOffers = signal<PersonalFoodOffer[]>([]);
   readonly requests = signal<PersonalAidRequest[]>([]);
   readonly fullName = signal('');
@@ -23,6 +25,8 @@ export class PersonPage {
   readonly sending = signal<string | null>(null);
   readonly message = signal('');
   readonly requestError = signal('');
+  readonly chatError = signal('');
+  readonly chatOpening = signal<string | null>(null);
   readonly preferredDates = signal<Record<string, string>>({});
   readonly searchCity = computed(() => this.cityFilter().trim());
   readonly joinRequests = computed(() => this.requests().filter((item) => item.requestType === 'membership'));
@@ -53,6 +57,22 @@ export class PersonPage {
   }
 
   setCity(event: Event): void { this.cityFilter.set((event.target as HTMLInputElement).value); }
+  async openChat(organizationId: string): Promise<void> {
+    if (this.chatOpening()) return;
+    this.chatOpening.set(organizationId);
+    this.chatError.set('');
+    try {
+      const conversationId = await this.auth.openChatWithOrganization(organizationId);
+      await this.router.navigate(['/app/chat', conversationId]);
+    } catch (reason) {
+      this.chatError.set(reason instanceof Error ? reason.message : 'No se pudo abrir la conversación.');
+    } finally {
+      this.chatOpening.set(null);
+    }
+  }
+  openInbox(): void { void this.router.navigateByUrl('/app/chat'); }
+  viewOrganization(organization: CommunityOrganization): void { this.selectedOrganization.set(organization); }
+  closeOrganizationProfile(): void { this.selectedOrganization.set(null); }
   setDate(id: string, event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.preferredDates.update((dates) => ({ ...dates, [id]: value }));

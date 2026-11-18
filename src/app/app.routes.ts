@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { roleGuard } from './guards/auth.guard';
+import { authGuard, roleGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -53,6 +53,16 @@ export const routes: Routes = [
     path: 'app/aid-requests',
     canActivate: [roleGuard],
     loadComponent: () => import('./pages/aid-requests/aid-requests.page').then((m) => m.AidRequestsPage),
+  },
+  {
+    path: 'app/chat',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/chat/chat.page').then((m) => m.ChatPage),
+  },
+  {
+    path: 'app/chat/:conversationId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/chat/chat.page').then((m) => m.ChatPage),
   },
   {
     path: 'app/:role',

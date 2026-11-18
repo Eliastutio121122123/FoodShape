@@ -18,6 +18,7 @@ export class AidRequestsPage {
   readonly error = signal('');
   readonly feedback = signal('');
   readonly processing = signal<string | null>(null);
+  readonly openingChatId = signal<string | null>(null);
   readonly role = this.auth.currentRole;
 
   constructor() {
@@ -53,6 +54,19 @@ export class AidRequestsPage {
         next: () => { this.processing.set(null); this.feedback.set(status === 'approved' ? 'Solicitud aprobada y actualizada.' : 'Solicitud marcada como no aprobada.'); this.reload(); },
         error: (reason: Error) => { this.processing.set(null); this.error.set(reason.message || 'No se pudo actualizar la solicitud.'); },
       });
+  }
+  async openChat(item: PersonalAidRequest): Promise<void> {
+    if (this.openingChatId() || !item.personId) return;
+    this.openingChatId.set(item.id);
+    this.error.set('');
+    try {
+      const conversationId = await this.auth.openChatWithPerson(item.personId);
+      await this.router.navigate(['/app/chat', conversationId]);
+    } catch (reason) {
+      this.error.set(reason instanceof Error ? reason.message : 'No se pudo abrir la conversación.');
+    } finally {
+      this.openingChatId.set(null);
+    }
   }
   nameForRole(): string { return this.role() === 'donor' ? 'donante' : 'beneficiaria'; }
   formatDate(value: string): string { return new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }

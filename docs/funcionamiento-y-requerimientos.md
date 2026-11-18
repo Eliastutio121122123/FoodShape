@@ -1,6 +1,6 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 17 de noviembre de 2026.
+**Estado revisado:** 18 de noviembre de 2026.
 
 > **Para qué sirve este documento:** es el inventario funcional y la guía de seguimiento de FoodShare. Reúne las 30 funcionalidades acordadas, explica qué está implementado y qué falta, y registra las validaciones pendientes en Supabase. Actualízalo cuando cambie el sistema para que el equipo tenga una referencia compartida y no confunda pantallas, maquetas o tablas con funciones terminadas.
 
@@ -14,8 +14,9 @@ Esta sección reúne las funciones incorporadas recientemente y reemplaza las de
 - **Coordinación y recepción:** las vistas muestran estado y pasos siguientes, dirección/ruta solo cuando los datos y permisos lo permiten, y el beneficiario puede confirmar la recepción. La confirmación se registra una sola vez y se refleja en el historial y en el panel del donante.
 - **Identidad entre cuentas:** la carga de perfiles filtra por usuario autenticado y rol, limpia datos anteriores y descarta respuestas tardías; así evita mostrar información de otra cuenta al cambiar de sesión.
 - **Interfaz:** el Inicio beneficiario y la búsqueda tienen estados de carga, error/reintento y listas vacías; navegación adaptable, tarjetas con imágenes, filtros acomodables y desplazamiento vertical en pantallas pequeñas.
+- **Mensajería interna:** se sustituyeron las acciones de correo externo por conversaciones dentro de FoodShare entre personas y organizaciones. La bandeja, los mensajes y las actualizaciones en vivo usan Supabase y aplican RLS para que solo las partes de la conversación puedan acceder.
 - **Rutas actuales:** el panel beneficiario vive en `/app/beneficiary`; Buscar donaciones, Mis solicitudes e Historial son secciones locales del panel. El perfil personal usa `/app/profile`.
-- **Migraciones nuevas relacionadas:** `20261115170000_beneficiary_requested_donation_read.sql`, `20261115200000_beneficiary_delivery_confirmation.sql`, `20261115230000_donor_beneficiary_profile_access.sql` y `20261115233000_renew_expired_donor_donation.sql`. Deben estar aplicadas en el proyecto Supabase que usa la aplicación; este documento no afirma que el estado remoto se haya verificado.
+- **Migraciones de donaciones beneficiarias:** `20261115170000_beneficiary_requested_donation_read.sql`, `20261115200000_beneficiary_delivery_confirmation.sql`, `20261115230000_donor_beneficiary_profile_access.sql` y `20261115233000_renew_expired_donor_donation.sql`. Su historial remoto debe verificarse por separado; el estado confirmado de las migraciones del chat se documenta en la sección correspondiente.
 
 ### Límites que siguen vigentes
 
@@ -29,8 +30,17 @@ Esta sección reúne las funciones incorporadas recientemente y reemplaza las de
 
 - Se incorporó el rol `person`, con registro personal, perfil activo y panel protegido en `/app/person`. El panel permite consultar organizaciones aprobadas por ciudad, revisar alimentos disponibles, contactar a las organizaciones, enviar solicitudes para unirse o pedir una ración y consultar el estado de esas solicitudes.
 - Donantes y organizaciones beneficiarias pueden abrir `/app/aid-requests` para revisar solicitudes personales pendientes, aprobarlas o rechazarlas; al aprobar una solicitud de ración, pueden coordinar fecha y hora. El perfil administrativo permite filtrar el rol de persona.
-- La migración `20261117090000_individual_beneficiaries.sql` añade el rol, la tabla `individual_aid_requests`, las políticas RLS y la notificación a la organización. La migración correctiva `20261117100000_fix_individual_aid_rls.sql` evita recursión entre políticas, concede permiso de inserción para `donation_id` y limita la revisión de solicitudes a estados pendientes. Ambas requieren aplicación en Supabase remoto; no se ejecutaron ni verificaron allí durante esta revisión.
+- La migración `20261117090000_individual_beneficiaries.sql` define el rol, `individual_aid_requests`, sus políticas RLS y la notificación a la organización; `20261117100000_fix_individual_aid_rls.sql` contiene correcciones iniciales. El historial remoto consultado registra las migraciones correctivas `20261117220833_fix_individual_aid_profile_rls_recursion` y `20261117221216_break_aid_donation_rls_cycle`. La tabla y el flujo de solicitudes están presentes en el proyecto; al sincronizar otro entorno, aplicar las migraciones locales en orden.
 - **Límite funcional:** aprobar una solicitud individual asociada a una donación no descuenta ni reserva automáticamente la cantidad de esa publicación. La coordinación de existencias para solicitudes personales debe validarse antes de usarla para comprometer inventario.
+
+## Mensajes dentro de FoodShare
+
+- Las personas pueden iniciar o retomar una conversación desde el directorio, una donación o sus solicitudes. Las organizaciones donantes y beneficiarias pueden abrir el chat desde las solicitudes recibidas cuando la persona ya tiene una solicitud vinculada.
+- La bandeja y el detalle están disponibles en `/app/chat` y `/app/chat/:conversationId`. Las pantallas de personas y de solicitudes incluyen accesos a esa ruta. No se abre Gmail ni se crea un enlace `mailto:`.
+- `AuthService` crea o reutiliza una conversación por pareja persona-organización, carga los mensajes autorizados, permite enviar texto y escucha nuevos mensajes mediante Supabase Realtime. Los mensajes se limitan a 2,000 caracteres.
+- Las tablas `public.chat_conversations` y `public.chat_messages` tienen RLS. La persona participante y el propietario de la organización asociada pueden leer y escribir; una cuenta ajena no puede consultar la conversación. La creación por una organización requiere una solicitud previa de esa persona. El sistema no guarda ubicación ni comparte datos privados fuera de esos participantes.
+- Migraciones aplicadas y registradas en el proyecto Supabase remoto: `20261118010256_foodshare_internal_chat.sql` (tablas, políticas, triggers y publicación Realtime) y `20261118011648_foodshare_chat_foreign_key_indexes.sql` (índices auxiliares de claves foráneas). La bandeja está vacía hasta que las personas abran una conversación.
+- **Límites actuales:** el chat admite texto; no incluye adjuntos, llamadas, indicador de escritura, confirmaciones de lectura ni contador de mensajes no leídos. La actualización en vivo depende de la conexión a Supabase Realtime.
 
 ## Perfil beneficiario visible desde solicitudes del donante
 
@@ -141,7 +151,7 @@ La aplicaciÃ³n estÃ¡ desarrollada con Ionic y Angular. La autenticaciÃ³n y
 - **Compilacion web:** la configuracion de desarrollo compilo correctamente despues de cambios recientes del panel, catalogos, reportes y autenticacion. La ultima compilacion de produccion documentada excedio los limites de estilos configurados en Angular; conviene volver a revisarla antes de publicar.
 - **Esquema remoto:** se pudo consultar `public.profiles` desde SQL Editor; por tanto, esa tabla existe en el proyecto Supabase. El archivo de migraciÃ³n tambiÃ©n existe en el repositorio.
 - **AutenticaciÃ³n remota:** se observaron errores distintos en momentos diferentes: una respuesta HTTP 400 de Auth por correo sin confirmar y, posteriormente, el mensaje de FoodShare que indica que la organizacion sigue pendiente. El segundo mensaje significa que Auth acepto las credenciales, pero el perfil o la organizacion no cumplio la validacion de acceso.
-- **Conectividad Supabase comprobada parcialmente:** el endpoint de Auth y el preflight CORS respondieron HTTP 200 desde el entorno local; la clave publishable configurada fue aceptada por Supabase. Esto no verifica que las migraciones nuevas se hayan aplicado en el proyecto remoto.
+- **Conectividad Supabase comprobada parcialmente:** el endpoint de Auth y el preflight CORS respondieron HTTP 200 desde el entorno local; la clave publishable configurada fue aceptada. Las dos migraciones del chat sí aparecen aplicadas en el historial remoto; el estado de las demás migraciones debe revisarse por separado.
 - **Administrador:** se pudo acceder al panel ` /app/admin ` en la sesion actual y la captura muestra la institucion en la pestaña Verificadas. Aun falta comprobar que la migracion de sincronizacion de aprobacion y acceso se haya ejecutado en Supabase y que la fila correspondiente tenga estados consistentes.
 - **ConfiguraciÃ³n:** la interfaz usa `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` desde `.env`; la clave `secret`/`service_role` nunca debe incorporarse al frontend. DespuÃ©s de cambiar `.env`, hay que recrear el servicio web para que regenere la configuraciÃ³n de ejecuciÃ³n.
 

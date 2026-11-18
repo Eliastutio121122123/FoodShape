@@ -1,11 +1,18 @@
 ﻿import { Injectable, computed, signal } from '@angular/core';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { from, Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export type AppRole = 'admin' | 'donor' | 'beneficiary' | 'volunteer' | 'person';
 export interface AuthSession { email: string; role: AppRole; }
 export interface LoginResponse { email: string; role: AppRole; accessToken: string; expiresAt: string; }
+export interface FoodShareChatMessage { id: string; conversationId: string; senderId: string; content: string; createdAt: string; }
+export interface FoodShareChatConversation {
+  id: string; personId: string; organizationId: string; personName: string; organizationName: string;
+  organizationType: 'donor' | 'beneficiary'; otherParticipantName: string; updatedAt: string;
+  lastMessage: string | null; lastMessageAt: string | null;
+}
+export interface FoodShareChatThread { conversation: FoodShareChatConversation; messages: FoodShareChatMessage[]; currentUserId: string; }
 export type OrganizationApplicationStatus = 'pending' | 'approved' | 'rejected';
 export interface FoodCategory { id: string; name: string; active: boolean; }
 export interface OrganizationCategory { id: string; organizationType: 'donor' | 'beneficiary'; name: string; active: boolean; }
@@ -213,7 +220,7 @@ export interface CommunityOrganization {
   address: string; city: string; phone: string; email: string;
 }
 export interface PersonalAidRequest {
-  id: string; organizationId: string; donationId: string | null; organizationName: string; organizationType: 'donor' | 'beneficiary';
+  id: string; personId: string; organizationId: string; donationId: string | null; organizationName: string; organizationType: 'donor' | 'beneficiary';
   address: string; city: string; phone: string; email: string; requestType: 'membership' | 'ration';
   status: 'pending' | 'approved' | 'rejected'; preferredDate: string | null; scheduledAt: string | null;
   message: string | null; createdAt: string; foodName: string | null; quantity: number | null; unit: string | null;
@@ -706,13 +713,13 @@ export class AuthService {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
       if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar tus solicitudes.');
       const { data, error } = await this.supabase.from('individual_aid_requests')
-        .select('id, organization_id, donation_id, request_type, status, preferred_date, scheduled_at, message, created_at, organizations!inner(name, organization_type, address, city, phone, email), donations(food_name, quantity, unit, address, city, pickup_starts_at, pickup_ends_at)')
+        .select('id, person_id, organization_id, donation_id, request_type, status, preferred_date, scheduled_at, message, created_at, organizations!inner(name, organization_type, address, city, phone, email), donations(food_name, quantity, unit, address, city, pickup_starts_at, pickup_ends_at)')
         .eq('person_id', user.id).order('created_at', { ascending: false });
       if (error) throw error;
       return (data ?? []).map((item) => {
         const org = item.organizations as unknown as Record<string, string>;
         const donation = item.donations as unknown as Record<string, string | number> | null;
-        return { id: item.id, organizationId: item.organization_id, donationId: item.donation_id, organizationName: org['name'],
+        return { id: item.id, personId: item.person_id, organizationId: item.organization_id, donationId: item.donation_id, organizationName: org['name'],
           organizationType: org['organization_type'] as 'donor' | 'beneficiary', address: donation?.['address'] as string ?? org['address'], city: donation?.['city'] as string ?? org['city'],
           phone: org['phone'], email: org['email'], requestType: item.request_type as 'membership' | 'ration',
           status: item.status as 'pending' | 'approved' | 'rejected', preferredDate: item.preferred_date,
@@ -756,6 +763,127 @@ export class AuthService {
     })());
   }
 
+  async openChatWithOrganization(organizationId: string): Promise<string> {
+    const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error('Inicia sesión para abrir un chat.');
+    if (this.currentRole() !== 'person') throw new Error('Solo las personas pueden iniciar un chat desde el directorio.');
+    return this.getOrCreateChat(user.id, organizationId);
+  }
+
+  async openChatWithPerson(personId: string): Promise<string> {
+    const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error('Inicia sesión para abrir un chat.');
+    const role = this.currentRole();
+    if (role !== 'donor' && role !== 'beneficiary') throw new Error('Esta cuenta no puede abrir chats con personas.');
+    const { data: organization, error } = await this.supabase.from('organizations').select('id')
+      .eq('owner_id', user.id).eq('organization_type', role).maybeSingle();
+    if (error) throw error;
+    if (!organization) throw new Error('No encontramos una organización activa asociada a esta cuenta.');
+    return this.getOrCreateChat(personId, organization.id);
+  }
+
+  private async getOrCreateChat(personId: string, organizationId: string): Promise<string> {
+    const { data, error } = await this.supabase.from('chat_conversations').upsert(
+      { person_id: personId, organization_id: organizationId },
+      { onConflict: 'person_id,organization_id', ignoreDuplicates: true },
+    ).select('id').maybeSingle();
+    if (error) throw error;
+    if (data?.id) return data.id;
+    const existing = await this.supabase.from('chat_conversations').select('id')
+      .eq('person_id', personId).eq('organization_id', organizationId).maybeSingle();
+    if (existing.error) throw existing.error;
+    if (!existing.data?.id) throw new Error('No se pudo abrir la conversación. Comprueba tu acceso e inténtalo de nuevo.');
+    return existing.data.id;
+  }
+
+  async loadChatConversations(): Promise<FoodShareChatConversation[]> {
+    const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar tus mensajes.');
+    const role = this.currentRole();
+    if (role !== 'person' && role !== 'donor' && role !== 'beneficiary') {
+      throw new Error('El chat está disponible para personas y organizaciones.');
+    }
+    const { data, error } = await this.supabase.from('chat_conversations')
+      .select('id, person_id, organization_id, person_display_name, organization_name, organization_type, updated_at')
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    const rows = data ?? [];
+    if (!rows.length) return [];
+    const { data: messages, error: messagesError } = await this.supabase.from('chat_messages')
+      .select('id, conversation_id, sender_id, content, created_at')
+      .in('conversation_id', rows.map((row) => row.id)).order('created_at', { ascending: false });
+    if (messagesError) throw messagesError;
+    const latestByConversation = new Map<string, { content: string; created_at: string }>();
+    for (const message of messages ?? []) {
+      if (!latestByConversation.has(message.conversation_id)) {
+        latestByConversation.set(message.conversation_id, { content: message.content, created_at: message.created_at });
+      }
+    }
+    return rows.map((row) => {
+      const latest = latestByConversation.get(row.id);
+      return {
+        id: row.id, personId: row.person_id, organizationId: row.organization_id,
+        personName: row.person_display_name, organizationName: row.organization_name,
+        organizationType: row.organization_type as 'donor' | 'beneficiary',
+        otherParticipantName: role === 'person' ? row.organization_name : row.person_display_name,
+        updatedAt: row.updated_at, lastMessage: latest?.content ?? null, lastMessageAt: latest?.created_at ?? null,
+      };
+    });
+  }
+
+  async loadChatThread(conversationId: string): Promise<FoodShareChatThread> {
+    const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error('Inicia sesión para abrir esta conversación.');
+    const { data: row, error } = await this.supabase.from('chat_conversations')
+      .select('id, person_id, organization_id, person_display_name, organization_name, organization_type, updated_at')
+      .eq('id', conversationId).maybeSingle();
+    if (error) throw error;
+    if (!row) throw new Error('La conversación no existe o tu cuenta no tiene acceso.');
+    const { data: messageRows, error: messagesError } = await this.supabase.from('chat_messages')
+      .select('id, conversation_id, sender_id, content, created_at')
+      .eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(500);
+    if (messagesError) throw messagesError;
+    const role = this.currentRole();
+    const messages = (messageRows ?? []).reverse().map((message) => ({
+      id: message.id, conversationId: message.conversation_id, senderId: message.sender_id,
+      content: message.content, createdAt: message.created_at,
+    }));
+    const summary: FoodShareChatConversation = {
+      id: row.id, personId: row.person_id, organizationId: row.organization_id,
+      personName: row.person_display_name, organizationName: row.organization_name,
+      organizationType: row.organization_type as 'donor' | 'beneficiary',
+      otherParticipantName: role === 'person' ? row.organization_name : row.person_display_name,
+      updatedAt: row.updated_at, lastMessage: messages.at(-1)?.content ?? null,
+      lastMessageAt: messages.at(-1)?.createdAt ?? null,
+    };
+    return {
+      conversation: summary,
+      currentUserId: user.id,
+      messages,
+    };
+  }
+
+  async sendChatMessage(conversationId: string, content: string): Promise<FoodShareChatMessage> {
+    const normalized = content.trim();
+    if (!normalized) throw new Error('Escribe un mensaje antes de enviarlo.');
+    if (normalized.length > 2000) throw new Error('El mensaje no puede superar los 2000 caracteres.');
+    const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error('Inicia sesión para enviar mensajes.');
+    const { data, error } = await this.supabase.from('chat_messages')
+      .insert({ conversation_id: conversationId, sender_id: user.id, content: normalized })
+      .select('id, conversation_id, sender_id, content, created_at').single();
+    if (error) throw error;
+    return { id: data.id, conversationId: data.conversation_id, senderId: data.sender_id, content: data.content, createdAt: data.created_at };
+  }
+
+  subscribeToChat(conversationId: string, onMessage: () => void): RealtimeChannel {
+    return this.supabase.channel(`chat:${conversationId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${conversationId}` }, onMessage)
+      .subscribe();
+  }
+
+  removeChatSubscription(channel: RealtimeChannel): void { void this.supabase.removeChannel(channel); }
+
   loadOrganizationAidRequests(): Observable<PersonalAidRequest[]> {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
@@ -764,13 +892,13 @@ export class AuthService {
         .select('id').eq('owner_id', user.id).maybeSingle();
       if (orgError || !organization) throw orgError ?? new Error('No encontramos la organización de esta cuenta.');
       const { data, error } = await this.supabase.from('individual_aid_requests')
-        .select('id, organization_id, donation_id, request_type, status, preferred_date, scheduled_at, message, created_at, profiles!inner(full_name, phone, email), donations(food_name, quantity, unit, address, city, pickup_starts_at, pickup_ends_at)')
+        .select('id, person_id, organization_id, donation_id, request_type, status, preferred_date, scheduled_at, message, created_at, profiles!inner(full_name, phone, email), donations(food_name, quantity, unit, address, city, pickup_starts_at, pickup_ends_at)')
         .eq('organization_id', organization.id).order('created_at', { ascending: false });
       if (error) throw error;
       return (data ?? []).map((item) => {
         const person = item.profiles as unknown as Record<string, string>;
         const donation = item.donations as unknown as Record<string, string | number> | null;
-        return { id: item.id, organizationId: item.organization_id, donationId: item.donation_id, organizationName: person['full_name'],
+        return { id: item.id, personId: item.person_id, organizationId: item.organization_id, donationId: item.donation_id, organizationName: person['full_name'],
           organizationType: 'beneficiary' as const, address: '', city: '', phone: person['phone'], email: person['email'],
           requestType: item.request_type as 'membership' | 'ration', status: item.status as 'pending' | 'approved' | 'rejected',
           preferredDate: item.preferred_date, scheduledAt: item.scheduled_at, message: item.message, createdAt: item.created_at,
