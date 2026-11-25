@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { OrganizationMapComponent } from '../../components/organization-map/organization-map.component';
 import { AuthService, CommunityOrganization, PersonalAidRequest, PersonalFoodOffer } from '../../services/auth.service';
 
 type PersonSection = 'offers' | 'organizations' | 'join' | 'rations';
@@ -8,7 +9,7 @@ type PersonSection = 'offers' | 'organizations' | 'join' | 'rations';
   selector: 'app-person',
   templateUrl: './person.page.html',
   styleUrls: ['./person.page.scss'],
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, OrganizationMapComponent],
 })
 export class PersonPage {
   private readonly auth = inject(AuthService);
@@ -17,6 +18,9 @@ export class PersonPage {
   readonly menuOpen = signal(false);
   readonly organizations = signal<CommunityOrganization[]>([]);
   readonly selectedOrganization = signal<CommunityOrganization | null>(null);
+  readonly selectedMapOrganization = signal<CommunityOrganization | null>(null);
+  readonly directoryView = signal<'list' | 'map'>('list');
+  readonly mapLoadError = signal(false);
   readonly foodOffers = signal<PersonalFoodOffer[]>([]);
   readonly failedOfferImages = signal<Set<string>>(new Set());
   readonly requests = signal<PersonalAidRequest[]>([]);
@@ -31,6 +35,7 @@ export class PersonPage {
   readonly chatOpening = signal<string | null>(null);
   readonly preferredDates = signal<Record<string, string>>({});
   readonly searchCity = computed(() => this.cityFilter().trim());
+  readonly locatedOrganizations = computed(() => this.organizations().filter((organization) => organization.latitude !== null && organization.longitude !== null));
   readonly joinRequests = computed(() => this.requests().filter((item) => item.requestType === 'membership'));
   readonly rationRequests = computed(() => this.requests().filter((item) => item.requestType === 'ration'));
   readonly upcomingRations = computed(() => this.rationRequests().filter((item) => item.status === 'approved' && item.scheduledAt));
@@ -46,6 +51,7 @@ export class PersonPage {
   reload(): void {
     this.loading.set(true);
     this.error.set('');
+    this.selectedMapOrganization.set(null);
     this.auth.loadCommunityDirectory(this.cityFilter()).subscribe({
       next: (items) => { this.organizations.set(items); this.loading.set(false); },
       error: (reason: Error) => { this.error.set(reason.message || 'No pudimos cargar las organizaciones.'); this.loading.set(false); },
@@ -62,6 +68,9 @@ export class PersonPage {
 
   setCity(event: Event): void { this.cityFilter.set((event.target as HTMLInputElement).value); }
   navigateTo(section: PersonSection): void { this.section.set(section); this.menuOpen.set(false); }
+  setDirectoryView(view: 'list' | 'map'): void { this.directoryView.set(view); this.selectedMapOrganization.set(null); if (view === 'map') this.mapLoadError.set(false); }
+  selectMapOrganization(id: string): void { this.selectedMapOrganization.set(this.organizations().find((organization) => organization.id === id) ?? null); }
+  mapDidFail(): void { this.mapLoadError.set(true); }
   toggleMenu(): void { this.menuOpen.update((open) => !open); }
   handleOfferImageError(id: string): void { this.failedOfferImages.update((current) => new Set(current).add(id)); }
   async openChat(organizationId: string): Promise<void> {

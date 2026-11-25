@@ -1,7 +1,8 @@
-﻿import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { from, Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { MapServicesService } from './map-services.service';
 
 export type AppRole = 'admin' | 'donor' | 'beneficiary' | 'volunteer' | 'person';
 export interface AuthSession { email: string; role: AppRole; }
@@ -223,7 +224,8 @@ export interface BeneficiaryDashboardSnapshot {
 }
 export interface CommunityOrganization {
   id: string; name: string; organizationType: 'donor' | 'beneficiary'; profileType: string | null;
-  address: string; city: string; phone: string; email: string;
+  address: string; city: string; phone: string; latitude: number | null; longitude: number | null;
+  locationPrecision: 'address' | 'city' | 'unknown';
 }
 export interface PersonalAidRequest {
   id: string; personId: string; organizationId: string; donationId: string | null; organizationName: string; organizationType: 'donor' | 'beneficiary';
@@ -294,6 +296,7 @@ const roles: AppRole[] = ['admin', 'donor', 'beneficiary', 'volunteer', 'person'
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private readonly mapServices = inject(MapServicesService);
   private readonly supabase: SupabaseClient = createClient(environment.supabaseUrl, environment.supabasePublishableKey);
   private readonly sessionState = signal<AuthSession | null>(null);
   private restoringSession: Promise<void> | null = null;
@@ -372,6 +375,9 @@ export class AuthService {
 
   registerAccount(payload: RegistrationPayload): Observable<{ email: string; role: string; status: string }> {
     return from((async () => {
+      const organizationLocation = payload.role === 'donor' || payload.role === 'beneficiary'
+        ? await this.geocodeOrganizationAddress(payload.address ?? '', payload.city ?? '')
+        : null;
       const { data, error } = await this.supabase.auth.signUp({
         email: payload.email,
         password: payload.password,
@@ -381,6 +387,9 @@ export class AuthService {
           city: payload.city, profile_type: payload.profileType, transport_type: payload.transportType,
           other_transport_type: payload.otherTransportType, availability_zone: payload.availabilityZone,
           agreement_accepted: payload.agreementAccepted === true,
+          organization_latitude: organizationLocation?.latitude ?? null,
+          organization_longitude: organizationLocation?.longitude ?? null,
+          organization_location_precision: organizationLocation?.precision ?? 'unknown',
         } },
       });
       if (error) throw error;
@@ -703,15 +712,46 @@ export class AuthService {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
       if (userError || !user) throw userError ?? new Error('Inicia sesión para consultar organizaciones.');
-      const { data, error } = await this.supabase.from('organizations')
-        .select('id, name, organization_type, profile_type, address, city, phone, email')
-        .eq('verification_status', 'approved').eq('status', 'active').order('name');
+      const { data, error } = await this.supabase.rpc('get_person_organization_map_directory');
       if (error) throw error;
+      const rows = (data ?? []) as { id: string; name: string; organization_type: 'donor' | 'beneficiary'; profile_type: string | null;
+        address: string; city: string; phone: string; latitude: number | string | null; longitude: number | string | null;
+        location_precision: 'address' | 'city' | 'unknown' }[];
       const needle = city.trim().toLocaleLowerCase();
-      return (data ?? []).filter((item) => !needle || String(item.city ?? '').toLocaleLowerCase().includes(needle))
+      return rows.filter((item) => !needle || String(item.city ?? '').toLocaleLowerCase().includes(needle))
         .map((item) => ({ id: item.id, name: item.name, organizationType: item.organization_type, profileType: item.profile_type,
-          address: item.address, city: item.city, phone: item.phone, email: item.email }));
+          address: item.address, city: item.city, phone: item.phone,
+          latitude: item.latitude === null ? null : Number(item.latitude), longitude: item.longitude === null ? null : Number(item.longitude),
+          locationPrecision: item.location_precision }));
     })());
+  }
+
+  private async geocodeOrganizationAddress(address: string, city: string): Promise<{ latitude: number; longitude: number; precision: 'address' | 'city' } | null> {
+    const query = [address.trim(), city.trim(), 'República Dominicana'].filter(Boolean).join(', ');
+    if (!address.trim() || !city.trim()) return null;
+    try {
+      const mapConfiguration = await this.mapServices.load();
+      const url = new URL(mapConfiguration.geocodingSearchUrl);
+      url.search = new URLSearchParams({ q: query, format: 'jsonv2', limit: '1', countrycodes: 'do' }).toString();
+      // One end-user-triggered request during organization signup; no autocomplete
+      // or repeated lookup while typing. Browsers provide the page Referer.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      let response: Response;
+      try { response = await fetch(url, { headers: { 'Accept-Language': 'es' }, signal: controller.signal }); }
+      finally { clearTimeout(timeoutId); }
+      if (!response.ok) return null;
+      const results = await response.json() as { lat?: string; lon?: string; addresstype?: string }[];
+      const latitude = Number(results[0]?.lat);
+      const longitude = Number(results[0]?.lon);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+        || latitude < 17 || latitude > 20 || longitude < -72 || longitude > -68.2) return null;
+      const precision = ['house', 'building', 'road', 'residential'].includes(results[0]?.addresstype ?? '') ? 'address' : 'city';
+      return { latitude, longitude, precision };
+    } catch {
+      // Registration must still work when the optional geocoding provider is down.
+      return null;
+    }
   }
 
   loadPersonalAidRequests(): Observable<PersonalAidRequest[]> {
