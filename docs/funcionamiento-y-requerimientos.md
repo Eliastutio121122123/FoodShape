@@ -1,6 +1,6 @@
 ﻿# FoodShare: funcionamiento, requerimientos y estado
 
-**Estado revisado:** 18 de noviembre de 2026.
+**Estado revisado:** 25 de noviembre de 2026.
 
 > **Para qué sirve este documento:** es el inventario funcional y la guía de seguimiento de FoodShare. Reúne las 30 funcionalidades acordadas, explica qué está implementado y qué falta, y registra las validaciones pendientes en Supabase. Actualízalo cuando cambie el sistema para que el equipo tenga una referencia compartida y no confunda pantallas, maquetas o tablas con funciones terminadas.
 
@@ -14,7 +14,7 @@ Esta sección reúne las funciones incorporadas recientemente y reemplaza las de
 - **Coordinación y recepción:** las vistas muestran estado y pasos siguientes, dirección/ruta solo cuando los datos y permisos lo permiten, y el beneficiario puede confirmar la recepción. La confirmación se registra una sola vez y se refleja en el historial y en el panel del donante.
 - **Identidad entre cuentas:** la carga de perfiles filtra por usuario autenticado y rol, limpia datos anteriores y descarta respuestas tardías; así evita mostrar información de otra cuenta al cambiar de sesión.
 - **Interfaz:** el Inicio beneficiario y la búsqueda tienen estados de carga, error/reintento y listas vacías; navegación adaptable, tarjetas con imágenes, filtros acomodables y desplazamiento vertical en pantallas pequeñas.
-- **Mensajería interna:** se sustituyeron las acciones de correo externo por conversaciones dentro de FoodShare entre personas y organizaciones. La bandeja, los mensajes y las actualizaciones en vivo usan Supabase y aplican RLS para que solo las partes de la conversación puedan acceder.
+- **Mensajería interna:** se sustituyeron las acciones de correo externo por conversaciones dentro de FoodShare entre personas y organizaciones. La bandeja, las respuestas a mensajes y la eliminación de mensajes propios usan Supabase y aplican RLS para que solo las partes de la conversación puedan acceder.
 - **Rutas actuales:** el panel beneficiario vive en `/app/beneficiary`; Buscar donaciones, Mis solicitudes e Historial son secciones locales del panel. El perfil personal usa `/app/profile`.
 - **Migraciones de donaciones beneficiarias:** `20261115170000_beneficiary_requested_donation_read.sql`, `20261115200000_beneficiary_delivery_confirmation.sql`, `20261115230000_donor_beneficiary_profile_access.sql` y `20261115233000_renew_expired_donor_donation.sql`. Su historial remoto debe verificarse por separado; el estado confirmado de las migraciones del chat se documenta en la sección correspondiente.
 
@@ -38,8 +38,10 @@ Esta sección reúne las funciones incorporadas recientemente y reemplaza las de
 - Las personas pueden iniciar o retomar una conversación desde el directorio, una donación o sus solicitudes. Las organizaciones donantes y beneficiarias pueden abrir el chat desde las solicitudes recibidas cuando la persona ya tiene una solicitud vinculada.
 - La bandeja y el detalle están disponibles en `/app/chat` y `/app/chat/:conversationId`. Las pantallas de personas y de solicitudes incluyen accesos a esa ruta. No se abre Gmail ni se crea un enlace `mailto:`.
 - `AuthService` crea o reutiliza una conversación por pareja persona-organización, carga los mensajes autorizados, permite enviar texto y escucha nuevos mensajes mediante Supabase Realtime. Los mensajes se limitan a 2,000 caracteres.
+- Cada mensaje puede responder a otro mensaje de la misma conversación; la interfaz muestra la referencia y quién lo escribió. La base de datos impide responder a mensajes eliminados o pertenecientes a otro chat.
+- Cada participante puede eliminar sus propios mensajes. La eliminación es lógica: el texto se reemplaza por «Este mensaje fue eliminado», no se puede deshacer y se sincroniza en tiempo real. No se permite borrar ni modificar el mensaje de la otra parte.
 - Las tablas `public.chat_conversations` y `public.chat_messages` tienen RLS. La persona participante y el propietario de la organización asociada pueden leer y escribir; una cuenta ajena no puede consultar la conversación. La creación por una organización requiere una solicitud previa de esa persona. El sistema no guarda ubicación ni comparte datos privados fuera de esos participantes.
-- Migraciones aplicadas y registradas en el proyecto Supabase remoto: `20261118010256_foodshare_internal_chat.sql` (tablas, políticas, triggers y publicación Realtime) y `20261118011648_foodshare_chat_foreign_key_indexes.sql` (índices auxiliares de claves foráneas). La bandeja está vacía hasta que las personas abran una conversación.
+- Migraciones aplicadas y registradas en el proyecto Supabase remoto: `20261118010256_foodshare_internal_chat.sql`, `20261118011648_foodshare_chat_foreign_key_indexes.sql` y `20261125124700_chat_replies_and_soft_delete.sql` (respuestas, eliminación lógica y sus permisos).
 - **Límites actuales:** el chat admite texto; no incluye adjuntos, llamadas, indicador de escritura, confirmaciones de lectura ni contador de mensajes no leídos. La actualización en vivo depende de la conexión a Supabase Realtime.
 
 ## Perfil beneficiario visible desde solicitudes del donante

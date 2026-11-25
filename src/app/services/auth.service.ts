@@ -6,7 +6,10 @@ import { environment } from '../../environments/environment';
 export type AppRole = 'admin' | 'donor' | 'beneficiary' | 'volunteer' | 'person';
 export interface AuthSession { email: string; role: AppRole; }
 export interface LoginResponse { email: string; role: AppRole; accessToken: string; expiresAt: string; }
-export interface FoodShareChatMessage { id: string; conversationId: string; senderId: string; content: string; createdAt: string; }
+export interface FoodShareChatMessage {
+  id: string; conversationId: string; senderId: string; content: string; createdAt: string;
+  replyToMessageId: string | null; deletedAt: string | null;
+}
 export interface FoodShareChatConversation {
   id: string; personId: string; organizationId: string; personName: string; organizationName: string;
   organizationType: 'donor' | 'beneficiary'; otherParticipantName: string; updatedAt: string;
@@ -810,7 +813,7 @@ export class AuthService {
     const rows = data ?? [];
     if (!rows.length) return [];
     const { data: messages, error: messagesError } = await this.supabase.from('chat_messages')
-      .select('id, conversation_id, sender_id, content, created_at')
+      .select('id, conversation_id, sender_id, content, created_at, reply_to_message_id, deleted_at')
       .in('conversation_id', rows.map((row) => row.id)).order('created_at', { ascending: false });
     if (messagesError) throw messagesError;
     const latestByConversation = new Map<string, { content: string; created_at: string }>();
@@ -840,13 +843,14 @@ export class AuthService {
     if (error) throw error;
     if (!row) throw new Error('La conversación no existe o tu cuenta no tiene acceso.');
     const { data: messageRows, error: messagesError } = await this.supabase.from('chat_messages')
-      .select('id, conversation_id, sender_id, content, created_at')
+      .select('id, conversation_id, sender_id, content, created_at, reply_to_message_id, deleted_at')
       .eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(500);
     if (messagesError) throw messagesError;
     const role = this.currentRole();
     const messages = (messageRows ?? []).reverse().map((message) => ({
       id: message.id, conversationId: message.conversation_id, senderId: message.sender_id,
       content: message.content, createdAt: message.created_at,
+      replyToMessageId: message.reply_to_message_id, deletedAt: message.deleted_at,
     }));
     const summary: FoodShareChatConversation = {
       id: row.id, personId: row.person_id, organizationId: row.organization_id,
@@ -863,22 +867,35 @@ export class AuthService {
     };
   }
 
-  async sendChatMessage(conversationId: string, content: string): Promise<FoodShareChatMessage> {
+  async sendChatMessage(conversationId: string, content: string, replyToMessageId: string | null = null): Promise<FoodShareChatMessage> {
     const normalized = content.trim();
     if (!normalized) throw new Error('Escribe un mensaje antes de enviarlo.');
     if (normalized.length > 2000) throw new Error('El mensaje no puede superar los 2000 caracteres.');
     const { data: { user }, error: userError } = await this.supabase.auth.getUser();
     if (userError || !user) throw userError ?? new Error('Inicia sesión para enviar mensajes.');
     const { data, error } = await this.supabase.from('chat_messages')
-      .insert({ conversation_id: conversationId, sender_id: user.id, content: normalized })
-      .select('id, conversation_id, sender_id, content, created_at').single();
+      .insert({ conversation_id: conversationId, sender_id: user.id, content: normalized, reply_to_message_id: replyToMessageId })
+      .select('id, conversation_id, sender_id, content, created_at, reply_to_message_id, deleted_at').single();
     if (error) throw error;
-    return { id: data.id, conversationId: data.conversation_id, senderId: data.sender_id, content: data.content, createdAt: data.created_at };
+    return {
+      id: data.id, conversationId: data.conversation_id, senderId: data.sender_id,
+      content: data.content, createdAt: data.created_at,
+      replyToMessageId: data.reply_to_message_id, deletedAt: data.deleted_at,
+    };
+  }
+
+  async deleteOwnChatMessage(messageId: string): Promise<void> {
+    const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error('Inicia sesión para eliminar un mensaje.');
+    const { error } = await this.supabase.from('chat_messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', messageId).eq('sender_id', user.id);
+    if (error) throw error;
   }
 
   subscribeToChat(conversationId: string, onMessage: () => void): RealtimeChannel {
     return this.supabase.channel(`chat:${conversationId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${conversationId}` }, onMessage)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${conversationId}` }, onMessage)
       .subscribe();
   }
 

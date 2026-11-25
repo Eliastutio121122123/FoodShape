@@ -1,7 +1,7 @@
 import { Component, OnDestroy, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { AuthService, FoodShareChatConversation, FoodShareChatThread } from '../../services/auth.service';
+import { AuthService, FoodShareChatConversation, FoodShareChatMessage, FoodShareChatThread } from '../../services/auth.service';
 
 @Component({
   selector: 'app-chat',
@@ -19,6 +19,9 @@ export class ChatPage implements OnDestroy {
   readonly selectedId = signal<string | null>(null);
   readonly thread = signal<FoodShareChatThread | null>(null);
   readonly draft = signal('');
+  readonly replyTo = signal<FoodShareChatMessage | null>(null);
+  readonly confirmDeleteId = signal<string | null>(null);
+  readonly deletingId = signal<string | null>(null);
   readonly inboxLoading = signal(true);
   readonly threadLoading = signal(false);
   readonly sending = signal(false);
@@ -35,6 +38,8 @@ export class ChatPage implements OnDestroy {
       const conversationId = params.get('conversationId');
       this.selectedId.set(conversationId);
       this.draft.set('');
+      this.replyTo.set(null);
+      this.confirmDeleteId.set(null);
       this.releaseChannel();
       void this.loadInbox();
       if (conversationId) void this.loadThread(conversationId);
@@ -92,14 +97,55 @@ export class ChatPage implements OnDestroy {
     this.sending.set(true);
     this.error.set('');
     try {
-      await this.auth.sendChatMessage(conversationId, content);
+      await this.auth.sendChatMessage(conversationId, content, this.replyTo()?.id ?? null);
       this.draft.set('');
+      this.replyTo.set(null);
       await Promise.all([this.loadThread(conversationId, true), this.loadInbox()]);
     } catch (reason) {
       this.error.set(reason instanceof Error ? reason.message : 'No se pudo enviar el mensaje. Comprueba tu conexión e inténtalo otra vez.');
     } finally {
       this.sending.set(false);
     }
+  }
+
+  startReply(message: FoodShareChatMessage): void {
+    if (message.deletedAt) return;
+    this.confirmDeleteId.set(null);
+    this.replyTo.set(message);
+  }
+
+  cancelReply(): void { this.replyTo.set(null); }
+
+  askDelete(message: FoodShareChatMessage): void {
+    this.replyTo.set(null);
+    this.confirmDeleteId.set(message.id);
+  }
+
+  cancelDelete(): void { this.confirmDeleteId.set(null); }
+
+  async confirmDelete(message: FoodShareChatMessage): Promise<void> {
+    if (this.deletingId()) return;
+    this.deletingId.set(message.id);
+    this.error.set('');
+    try {
+      await this.auth.deleteOwnChatMessage(message.id);
+      this.confirmDeleteId.set(null);
+      await Promise.all([this.loadThread(message.conversationId, true), this.loadInbox()]);
+    } catch (reason) {
+      this.error.set(reason instanceof Error ? reason.message : 'No se pudo eliminar el mensaje. Comprueba tu conexión e inténtalo de nuevo.');
+    } finally {
+      this.deletingId.set(null);
+    }
+  }
+
+  replyAuthor(message: FoodShareChatMessage, thread: FoodShareChatThread): string {
+    return message.senderId === thread.currentUserId ? 'Tú' : this.roleLabel(thread.conversation);
+  }
+
+  replyPreview(message: FoodShareChatMessage, thread: FoodShareChatThread): FoodShareChatMessage | null {
+    return message.replyToMessageId
+      ? thread.messages.find((candidate) => candidate.id === message.replyToMessageId) ?? null
+      : null;
   }
 
   formatMessageTime(value: string): string {

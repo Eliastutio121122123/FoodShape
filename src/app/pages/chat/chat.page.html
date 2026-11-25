@@ -36,12 +36,29 @@
           @if (activeThread.messages.length === 0) { <div class="first-message"><span class="empty-icon">✦</span><strong>Empieza la conversación</strong><p>Comparte lo que necesitas coordinar. Solo los participantes de esta conversación pueden leer estos mensajes.</p></div> }
           @for (message of activeThread.messages; track message.id) {
             <article class="message-bubble" [class.mine]="message.senderId === activeThread.currentUserId">
-              <p>{{ message.content }}</p><time>{{ formatMessageTime(message.createdAt) }}</time>
+              @if (replyPreview(message, activeThread); as quoted) {
+                <div class="reply-reference"><strong>{{ replyAuthor(quoted, activeThread) }}</strong><span>{{ quoted.deletedAt ? 'Mensaje eliminado' : quoted.content }}</span></div>
+              }
+              <p [class.message-deleted]="!!message.deletedAt">{{ message.deletedAt ? 'Este mensaje fue eliminado.' : message.content }}</p>
+              <time>{{ formatMessageTime(message.createdAt) }}</time>
+              @if (!message.deletedAt) {
+                <div class="message-actions">
+                  <button type="button" (click)="startReply(message)">Responder</button>
+                  @if (message.senderId === activeThread.currentUserId) {
+                    @if (confirmDeleteId() === message.id) {
+                      <span class="delete-confirm"><span>¿Eliminar?</span><button type="button" [disabled]="deletingId() === message.id" (click)="confirmDelete(message)">{{ deletingId() === message.id ? 'Eliminando…' : 'Sí, borrar' }}</button><button type="button" (click)="cancelDelete()">Cancelar</button></span>
+                    } @else { <button type="button" class="delete-action" (click)="askDelete(message)">Eliminar</button> }
+                  }
+                </div>
+              }
             </article>
           }
         </div>
         @if (error()) { <p class="chat-error" role="alert">{{ error() }}</p> }
         <form class="composer" (submit)="send($event)">
+          @if (replyTo(); as replying) {
+            <div class="reply-composer"><div><strong>Respondiendo a {{ replyAuthor(replying, activeThread) }}</strong><span>{{ replying.content }}</span></div><button type="button" aria-label="Cancelar respuesta" (click)="cancelReply()">×</button></div>
+          }
           <label class="sr-only" for="chat-draft">Escribe un mensaje</label>
           <textarea id="chat-draft" rows="2" maxlength="2000" [value]="draft()" (input)="updateDraft($event)" placeholder="Escribe un mensaje…" [disabled]="sending()"></textarea>
           <div class="composer-footer"><small>{{ draft().length }}/2000 · Solo texto</small><button type="submit" [disabled]="!draft().trim() || sending()">{{ sending() ? 'Enviando…' : 'Enviar mensaje' }} <span aria-hidden="true">↗</span></button></div>
