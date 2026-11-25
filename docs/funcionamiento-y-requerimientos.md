@@ -2,6 +2,20 @@
 
 **Estado revisado:** 25 de noviembre de 2026.
 
+## Actualización: inventario y reposición de donaciones
+
+- El inventario de cada publicación se divide en `available_quantity` (disponible), `reserved_quantity` (aceptado y pendiente de entrega) y `delivered_quantity` (recepción confirmada). `quantity` conserva la cantidad total publicada para esa tanda.
+- El donante acepta solicitudes de forma atómica: se valida el stock vigente, se reserva únicamente la cantidad solicitada y se conserva el resto para nuevas solicitudes. Al agotarse el stock, las solicitudes pendientes restantes se rechazan para evitar aceptar más de lo disponible.
+- La confirmación de recepción por la organización beneficiaria traslada la cantidad desde reservada a entregada. La publicación solo pasa a «Entregada» cuando ya no quedan cantidades disponibles ni reservadas; por tanto, una entrega parcial no cierra el resto del producto.
+- Si se cancela una entrega antes de que comience la recogida, su cantidad reservada vuelve al inventario. La reserva también se libera cuando la oferta venció, pero su estado vencido evita que vuelva a aparecer en las búsquedas públicas. No se permite cancelar desde este flujo una entrega ya iniciada ni una recepción confirmada.
+- «Mis donaciones» muestra las tandas con stock o entregas pendientes en **Activas**; separa **Disponibles**, **Ocultas**, **Con reservas** y **Agotadas y archivo**. La ficha distingue cantidades disponibles, reservadas y entregadas.
+- Cuando una tanda ya no tiene stock disponible ni reservas pendientes, **Reponer stock** crea una publicación nueva con la misma descripción, categoría e imagen, cantidad y horario nuevos. La tanda anterior permanece en archivo con sus entregas y solicitudes, sin reactivarse ni sobrescribir su historial.
+- Las vistas del mercado personal y beneficiario consultan únicamente ofertas visibles, vigentes y con stock disponible. La solicitud valida la cantidad contra existencias y la aceptación vuelve a comprobarla bajo bloqueo en la base de datos.
+- Se agregó la migración nueva `20261125131500_donor_donation_stock_lifecycle.sql`: columnas y restricciones de inventario, relleno del stock para datos anteriores, funciones seguras para aceptar/confirmar/cancelar, liberación de reservas en cancelaciones seguras y RPC de reposición.
+- **Requisito de despliegue:** aplicar esta migración al proyecto Supabase usado por la aplicación antes de desplegar/usar la versión de código que consulta las nuevas columnas. La migración está añadida al repositorio, pero no se ejecutó en la base remota desde esta sesión.
+- No hay seguimiento GPS en vivo. El mapa continúa representando una ruta estimada a partir de las ubicaciones disponibles.
+- La aprobación de solicitudes personales de raciones (`individual_aid_requests`) sigue siendo un flujo aparte y no reserva stock de publicaciones: esa tabla no registra cantidad solicitada ni está vinculada a las entregas del flujo de organizaciones.
+
 ## Cambio reciente: solicitudes personales aprobadas
 
 - La bandeja `/app/aid-requests` ahora permite separar **Todas**, **Pendientes**, **Aprobadas** y **No aprobadas**, con el conteo actualizado desde las solicitudes que carga Supabase.
@@ -90,7 +104,7 @@ Esta actualización describe las funciones del panel donante; el mercado y el en
 - **Publicar donaciones:** el formulario carga categorías activas y la dirección registrada de la organización, valida nombre, cantidad, unidad y fechas, guarda los datos en `public.donations` y permite cargar fotos al bucket `foodshare-donations`.
 - **Mis donaciones:** consulta publicaciones persistentes; incluye búsqueda, filtros por estado y ocultas, cantidades, vencimientos, foto y estado de solicitudes. Las unidades técnicas se presentan en español.
 - **Detalle y mantenimiento:** cada publicación abre una ficha con imagen, descripción, categoría, cantidad, horarios, vencimiento, dirección y solicitudes. El menú de tres puntos permite editar publicaciones disponibles sin solicitudes, ocultar o volver a mostrar una publicación y eliminarla cuando no tiene solicitudes relacionadas. El borrado conserva las restricciones de integridad; cuando hay solicitudes, se debe ocultar y conservar el registro.
-- **Solicitudes recibidas:** el panel consulta solicitudes persistentes, muestra la organización solicitante y los datos autorizados de recogida, filtra pendientes/aceptadas/finalizadas y procesa aceptar o rechazar mediante `review_donation_request`. La aceptación reserva la donación, rechaza las solicitudes pendientes restantes de forma transaccional y crea la entrega asociada.
+- **Solicitudes recibidas:** el panel consulta solicitudes persistentes, muestra la organización solicitante y los datos autorizados de recogida, filtra pendientes/aceptadas/finalizadas y procesa aceptar o rechazar mediante `review_donation_request`. Con la migración de inventario aplicada, aceptar reserva solo la cantidad pedida y rechaza solicitudes restantes únicamente cuando ya no queda stock; la entrega queda asociada a la solicitud.
 - **Historial:** consulta entregas completadas y calcula alimentos entregados, entregas confirmadas y organizaciones apoyadas.
 - **Foto de perfil:** la barra lateral del panel donante muestra la foto guardada en el perfil; usa las iniciales como alternativa si no hay foto.
 - **Correcciones visuales:** las tarjetas mantienen visibles los datos aunque haya foto; el botón «Ver detalle» abre la ficha; el menú de tres puntos usa opciones legibles y no hereda la forma circular del botón.
@@ -106,13 +120,14 @@ Esta actualización describe las funciones del panel donante; el mercado y el en
 - `20261115200000_beneficiary_delivery_confirmation.sql`: crea/actualiza el flujo seguro de entregas y la confirmación de recepción por la organización beneficiaria.
 - `20261115230000_donor_beneficiary_profile_access.sql`: permite consultar al donante el perfil de la beneficiaria vinculada a solicitudes de sus propias donaciones.
 - `20261115233000_renew_expired_donor_donation.sql`: RPC para renovar de forma limitada una oferta vencida con solicitudes pendientes.
+- `20261125131500_donor_donation_stock_lifecycle.sql`: inventario por tandas, reserva y confirmación parcial, cancelación segura, liberación del stock y reposición mediante una nueva publicación. **Pendiente de aplicar en el proyecto Supabase remoto.**
 
 Las migraciones y el código están versionados en GitHub. La ejecución remota de SQL se hizo manualmente desde Supabase; no se confirma desde este repositorio el estado actual de cada migración. El 15 de noviembre se detectaron errores por las columnas `quantity_requested` e `is_visible` ausentes; después se vio el dashboard con publicaciones y una de ellas marcada como «Oculta», lo que confirma que la columna de visibilidad estaba disponible en esa captura. Si vuelven a aparecer errores de columna, revisar que se ejecutó el archivo correspondiente en el mismo proyecto Supabase configurado para la web.
 
 ### Estado pendiente relacionado
 
 - Las pantallas genéricas basadas en `InMemoryCrudService` y las operaciones de voluntariado siguen usando datos locales; no confundirlas con el flujo dedicado de donaciones y solicitudes ya conectado.
-- La creación, aceptación/rechazo y confirmación de recepción están conectadas. La cancelación de solicitudes por la beneficiaria y la asignación/seguimiento de voluntarios siguen pendientes.
+- La creación, aceptación/rechazo, cancelación de solicitudes de donación por la beneficiaria, confirmación de recepción y reposición por tandas están implementadas en el código. Las funciones nuevas de inventario requieren aplicar la migración `20261125131500_donor_donation_stock_lifecycle.sql`. La asignación/seguimiento de voluntarios sigue pendiente.
 - `npx tsc -p tsconfig.app.json --noEmit` pasó. `npx ng build --configuration development --output-path .angular/codex-avatar-check` completó correctamente el 15 de noviembre. No se ejecutaron pruebas automatizadas.
 
 ### Cambios publicados

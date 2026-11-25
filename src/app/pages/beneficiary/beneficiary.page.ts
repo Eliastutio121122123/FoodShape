@@ -31,6 +31,9 @@ export class BeneficiaryPage {
   readonly confirmingDeliveryId = signal<string | null>(null);
   readonly confirmationError = signal('');
   readonly confirmationMessage = signal('');
+  readonly cancellingRequestId = signal<string | null>(null);
+  readonly cancellationError = signal('');
+  readonly cancellationMessage = signal('');
 
   readonly availableDonations = computed(() => this.data()?.donations ?? []);
   readonly donationCategories = computed(() => ['Todas', ...new Set(this.availableDonations().map((donation) => donation.categoryName))]);
@@ -135,6 +138,30 @@ export class BeneficiaryPage {
       error: (reason: Error) => {
         this.confirmingDeliveryId.set(null);
         this.confirmationError.set(reason.message || 'No se pudo confirmar la recepción. Inténtalo de nuevo.');
+      },
+    });
+  }
+
+  canCancelRequest(request: BeneficiaryRequest): boolean {
+    return request.status === 'pending' || (request.status === 'accepted'
+      && !request.receivedConfirmedAt && ['pending', 'assigned'].includes(request.deliveryStatus ?? 'pending'));
+  }
+
+  cancelRequest(request: BeneficiaryRequest): void {
+    if (!this.canCancelRequest(request) || this.cancellingRequestId()) return;
+    if (!window.confirm('¿Cancelar esta solicitud? Si la entrega aún no comenzó, la cantidad reservada volverá al inventario del donante.')) return;
+    this.cancellingRequestId.set(request.id);
+    this.cancellationError.set('');
+    this.cancellationMessage.set('');
+    this.auth.cancelBeneficiaryDonationRequest(request.id).subscribe({
+      next: () => {
+        this.cancellingRequestId.set(null);
+        this.cancellationMessage.set('Solicitud cancelada. Si tenía una reserva segura, el stock volvió a estar disponible.');
+        this.reload();
+      },
+      error: (reason: Error) => {
+        this.cancellingRequestId.set(null);
+        this.cancellationError.set(reason.message || 'No se pudo cancelar la solicitud.');
       },
     });
   }

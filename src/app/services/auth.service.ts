@@ -102,6 +102,9 @@ export interface DonorManagementDonation {
   foodName: string;
   categoryName: string;
   quantity: number;
+  availableQuantity: number;
+  reservedQuantity: number;
+  deliveredQuantity: number;
   unit: string;
   status: string;
   isVisible: boolean;
@@ -739,15 +742,15 @@ export class AuthService {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
       if (userError || !user) throw userError ?? new Error('Inicia sesión para ver alimentos disponibles.');
       const { data, error } = await this.supabase.from('donations')
-        .select('id, food_name, quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, address, city, organizations!inner(id, name, phone, email), food_categories(name)')
-        .eq('status', 'available').gt('expires_at', new Date().toISOString()).order('expires_at');
+        .select('id, food_name, quantity, available_quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, address, city, organizations!inner(id, name, phone, email), food_categories(name)')
+        .eq('status', 'available').gt('available_quantity', 0).gt('expires_at', new Date().toISOString()).order('expires_at');
       if (error) throw error;
       const needle = city.trim().toLocaleLowerCase();
       return (data ?? []).filter((item) => !needle || String(item.city ?? '').toLocaleLowerCase().includes(needle)).map((item) => {
         const org = item.organizations as unknown as Record<string, string>;
         const category = item.food_categories as unknown as Record<string, string> | null;
         return { id: item.id, organizationId: org['id'], organizationName: org['name'], foodName: item.food_name,
-          quantity: Number(item.quantity), unit: item.unit, categoryName: category?.['name'] ?? 'Alimentos',
+          quantity: Number(item.available_quantity), unit: item.unit, categoryName: category?.['name'] ?? 'Alimentos',
           expiresAt: item.expires_at, pickupStartsAt: item.pickup_starts_at, pickupEndsAt: item.pickup_ends_at,
           address: item.address, city: item.city, phone: org['phone'], email: org['email'] };
       });
@@ -955,8 +958,8 @@ export class AuthService {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const [donationsResult, requestResult, notificationResult] = await Promise.all([
         this.supabase.from('donations')
-          .select('id, food_name, quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, city, notes, created_at, image_path, food_categories(name)')
-          .eq('status', 'available').eq('is_visible', true).gt('expires_at', now.toISOString())
+          .select('id, food_name, quantity, available_quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, city, notes, created_at, image_path, food_categories(name)')
+          .eq('status', 'available').eq('is_visible', true).gt('available_quantity', 0).gt('expires_at', now.toISOString())
           .order('created_at', { ascending: false }),
         this.supabase.from('donation_requests')
           .select('id, donation_id, status, quantity_requested, requested_at, updated_at')
@@ -973,7 +976,7 @@ export class AuthService {
       const donations: BeneficiaryDonation[] = (donationsResult.data ?? []).map((row) => ({
         id: row.id, createdAt: row.created_at, foodName: row.food_name, categoryName: categoryName(row.food_categories as CategoryRelation),
         imageUrl: row.image_path ? this.supabase.storage.from('foodshare-donations').getPublicUrl(row.image_path).data.publicUrl : null,
-        quantity: Number(row.quantity), unit: row.unit, expiresAt: row.expires_at,
+        quantity: Number(row.available_quantity), unit: row.unit, expiresAt: row.expires_at,
         pickupStartsAt: row.pickup_starts_at, pickupEndsAt: row.pickup_ends_at, city: row.city,
         description: row.notes,
       }));
@@ -1058,7 +1061,7 @@ export class AuthService {
       const [{ data: organization, error: organizationError }, { data: donation, error: donationError }] = await Promise.all([
         this.supabase.from('organizations').select('id, status, verification_status')
           .eq('owner_id', user.id).eq('organization_type', 'beneficiary').maybeSingle(),
-        this.supabase.from('donations').select('id, quantity, status, is_visible, expires_at')
+        this.supabase.from('donations').select('id, available_quantity, status, is_visible, expires_at')
           .eq('id', donationId).maybeSingle(),
       ]);
       if (organizationError) throw organizationError;
@@ -1070,7 +1073,7 @@ export class AuthService {
       if (!donation || donation.status !== 'available' || !donation.is_visible || Date.parse(donation.expires_at) <= Date.now()) {
         throw new Error('Esta donación ya no está disponible. Actualiza la lista e inténtalo con otra.');
       }
-      if (quantity > Number(donation.quantity)) throw new Error('La cantidad solicitada supera la cantidad disponible.');
+      if (quantity > Number(donation.available_quantity)) throw new Error('La cantidad solicitada supera la cantidad disponible.');
 
       const { error } = await this.supabase.from('donation_requests').insert({
         donation_id: donation.id, beneficiary_organization_id: organization.id,
@@ -1088,6 +1091,13 @@ export class AuthService {
     })());
   }
 
+  cancelBeneficiaryDonationRequest(requestId: string): Observable<void> {
+    return from((async () => {
+      const { error } = await this.supabase.rpc('cancel_beneficiary_donation_request', { p_request_id: requestId });
+      if (error) throw new Error(error.message || 'No se pudo cancelar la solicitud.');
+    })());
+  }
+
 
   loadDonorDashboard(): Observable<DonorDashboardSnapshot> {
     return from((async () => {
@@ -1100,7 +1110,7 @@ export class AuthService {
       if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
 
       const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
-        .select('id, food_name, quantity, unit, status, is_visible, expires_at, pickup_starts_at, pickup_ends_at, created_at')
+        .select('id, food_name, quantity, available_quantity, reserved_quantity, delivered_quantity, unit, status, is_visible, expires_at, pickup_starts_at, pickup_ends_at, created_at')
         .eq('donor_organization_id', organization.id).order('created_at', { ascending: false });
       if (donationsError) throw donationsError;
       const donations = donationRows ?? [];
@@ -1150,7 +1160,7 @@ export class AuthService {
       };
 
       const recentDonations = donations.slice(0, 3).map((donation) => ({
-        id: donation.id, foodName: donation.food_name, quantity: Number(donation.quantity), unit: donation.unit,
+        id: donation.id, foodName: donation.food_name, quantity: Number(donation.available_quantity), unit: donation.unit,
         status: donation.status, isVisible: donation.is_visible, expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
         pickupEndsAt: donation.pickup_ends_at, createdAt: donation.created_at,
         requestCount: (requestsByDonation.get(donation.id) ?? []).length,
@@ -1284,6 +1294,9 @@ export class AuthService {
         food_name: name,
         category_id: input.categoryId,
         quantity,
+        available_quantity: quantity,
+        reserved_quantity: 0,
+        delivered_quantity: 0,
         unit: input.unit,
         notes: input.description.trim() || null,
         address: organization.address,
@@ -1358,7 +1371,8 @@ export class AuthService {
       }
 
       const { data: updated, error: updateError } = await this.supabase.from('donations').update({
-        food_name: name, category_id: input.categoryId, quantity, unit: input.unit,
+        food_name: name, category_id: input.categoryId, quantity, available_quantity: quantity,
+        reserved_quantity: 0, delivered_quantity: 0, unit: input.unit,
         notes: input.description.trim() || null, address: organization.address, city: organization.city,
         pickup_starts_at: new Date(pickupStartsAt).toISOString(),
         pickup_ends_at: new Date(pickupEndsAt).toISOString(), expires_at: new Date(pickupEndsAt).toISOString(),
@@ -1416,6 +1430,28 @@ export class AuthService {
     })());
   }
 
+  restockDonorDonation(id: string, quantity: number, pickupStartsAt: string, pickupEndsAt: string): Observable<string> {
+    return from((async () => {
+      if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 9999999999.99) {
+        throw new Error('La cantidad de reposición debe ser mayor que cero.');
+      }
+      const startsAt = Date.parse(pickupStartsAt);
+      const endsAt = Date.parse(pickupEndsAt);
+      if (!Number.isFinite(startsAt) || startsAt <= Date.now() || !Number.isFinite(endsAt) || endsAt <= startsAt) {
+        throw new Error('Indica un horario futuro válido para recoger el alimento.');
+      }
+      const { data, error } = await this.supabase.rpc('restock_donor_donation', {
+        p_source_donation_id: id,
+        p_quantity: quantity,
+        p_pickup_starts_at: new Date(startsAt).toISOString(),
+        p_pickup_ends_at: new Date(endsAt).toISOString(),
+      });
+      if (error) throw new Error(error.message || 'No se pudo volver a publicar el alimento.');
+      if (!data) throw new Error('Supabase no devolvió la nueva publicación.');
+      return data as string;
+    })());
+  }
+
   loadDonorDonations(): Observable<DonorDonationsSnapshot> {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
@@ -1426,11 +1462,11 @@ export class AuthService {
       if (!organization) throw new Error('No encontramos una organización donante asociada a esta cuenta.');
 
       const { data: donationRows, error: donationsError } = await this.supabase.from('donations')
-        .select('id, food_name, category_id, quantity, unit, status, is_visible, expires_at, pickup_starts_at, pickup_ends_at, created_at, image_path, notes, address, city, food_categories(name)')
+        .select('id, food_name, category_id, quantity, available_quantity, reserved_quantity, delivered_quantity, unit, status, is_visible, expires_at, pickup_starts_at, pickup_ends_at, created_at, image_path, notes, address, city, food_categories(name)')
         .eq('donor_organization_id', organization.id).order('created_at', { ascending: false });
       if (donationsError) throw donationsError;
       const donations = (donationRows ?? []) as unknown as {
-        id: string; food_name: string; category_id: string | null; quantity: number; unit: string; status: string; is_visible: boolean;
+        id: string; food_name: string; category_id: string | null; quantity: number; available_quantity: number; reserved_quantity: number; delivered_quantity: number; unit: string; status: string; is_visible: boolean;
         expires_at: string; pickup_starts_at: string; pickup_ends_at: string; created_at: string;
         image_path: string | null;
         notes: string | null; address: string; city: string;
@@ -1478,7 +1514,9 @@ export class AuthService {
           const category = Array.isArray(donation.food_categories) ? donation.food_categories[0] : donation.food_categories;
           return {
             id: donation.id, categoryId: donation.category_id, foodName: donation.food_name, categoryName: category?.name ?? 'Otros',
-            quantity: Number(donation.quantity), unit: donation.unit, status: donation.status, isVisible: donation.is_visible,
+            quantity: Number(donation.quantity), availableQuantity: Number(donation.available_quantity),
+            reservedQuantity: Number(donation.reserved_quantity), deliveredQuantity: Number(donation.delivered_quantity),
+            unit: donation.unit, status: donation.status, isVisible: donation.is_visible,
             expiresAt: donation.expires_at, pickupStartsAt: donation.pickup_starts_at,
             pickupEndsAt: donation.pickup_ends_at, createdAt: donation.created_at,
             imageUrl: donation.image_path ? this.supabase.storage.from('foodshare-donations').getPublicUrl(donation.image_path).data.publicUrl : null,

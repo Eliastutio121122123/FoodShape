@@ -64,6 +64,12 @@ export class DonorPage {
   readonly createOptionsLoading = signal(false);
   readonly createOptionsError = signal('');
   readonly donationSaving = signal(false);
+  readonly restockingDonation = signal<DonorManagementDonation | null>(null);
+  readonly restockQuantity = signal('');
+  readonly restockStartsAt = signal(localDateTimeAfter(1));
+  readonly restockEndsAt = signal(localDateTimeAfter(4));
+  readonly restockError = signal('');
+  readonly restockSaving = signal(false);
   readonly donationFormError = signal('');
   readonly donationCreateMessage = signal('');
   readonly createFoodName = signal('');
@@ -90,11 +96,14 @@ export class DonorPage {
     const search = this.donationSearch().trim().toLocaleLowerCase();
     const status = this.donationStatusFilter();
     return this.donations().filter((donation) => {
+      const hasStock = donation.availableQuantity > 0;
+      const archived = ['expired', 'cancelled'].includes(donation.status);
       const matchesStatus = status === 'all'
-        || (status === 'available' && donation.status === 'available' && donation.isVisible)
-        || (status === 'hidden' && !donation.isVisible)
-        || (status === 'reserved' && ['requested', 'reserved', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status))
-        || (status === 'finalized' && ['delivered', 'completed', 'expired', 'cancelled'].includes(donation.status));
+        ? !archived && (hasStock || donation.reservedQuantity > 0)
+        : status === 'available' ? !archived && hasStock && donation.isVisible
+          : status === 'hidden' ? !archived && hasStock && !donation.isVisible
+            : status === 'reserved' ? donation.reservedQuantity > 0
+              : archived || (!hasStock && donation.reservedQuantity === 0);
       const matchesSearch = !search || `${donation.foodName} ${donation.categoryName} ${donation.status} ${donation.isVisible ? '' : 'oculta'} ${donation.beneficiaryName ?? ''}`.toLocaleLowerCase().includes(search);
       return matchesStatus && matchesSearch;
     });
@@ -310,7 +319,51 @@ export class DonorPage {
   }
 
   canEditDonation(donation: DonorManagementDonation): boolean {
-    return donation.status === 'available' && donation.requestCount === 0;
+    return donation.availableQuantity === donation.quantity && donation.reservedQuantity === 0
+      && donation.deliveredQuantity === 0 && donation.requestCount === 0 && donation.status === 'available';
+  }
+
+  canRestockDonation(donation: DonorManagementDonation): boolean {
+    return donation.availableQuantity <= 0 && donation.reservedQuantity <= 0;
+  }
+
+  openRestockForm(donation: DonorManagementDonation): void {
+    this.donationActionsId.set(null);
+    this.restockingDonation.set(donation);
+    this.restockQuantity.set('');
+    this.restockStartsAt.set(localDateTimeAfter(1));
+    this.restockEndsAt.set(localDateTimeAfter(4));
+    this.restockError.set('');
+  }
+
+  closeRestockForm(): void {
+    if (this.restockSaving()) return;
+    this.restockingDonation.set(null);
+    this.restockError.set('');
+  }
+
+  setRestockQuantity(event: Event): void { this.restockQuantity.set((event.target as HTMLInputElement).value); }
+  setRestockStartsAt(event: Event): void { this.restockStartsAt.set((event.target as HTMLInputElement).value); }
+  setRestockEndsAt(event: Event): void { this.restockEndsAt.set((event.target as HTMLInputElement).value); }
+
+  submitRestock(event: Event): void {
+    event.preventDefault();
+    const donation = this.restockingDonation();
+    const form = event.target as HTMLFormElement;
+    if (!donation || this.restockSaving() || !form.reportValidity()) return;
+    const quantity = Number(this.restockQuantity());
+    if (!Number.isFinite(quantity) || quantity <= 0) { this.restockError.set('La cantidad debe ser mayor que cero.'); return; }
+    this.restockSaving.set(true);
+    this.restockError.set('');
+    this.auth.restockDonorDonation(donation.id, quantity, this.restockStartsAt(), this.restockEndsAt()).subscribe({
+      next: () => {
+        this.restockSaving.set(false);
+        this.restockingDonation.set(null);
+        this.donationCreateMessage.set(`Se publicó una nueva oferta de ${donation.foodName}; el historial de la publicación anterior se conserva.`);
+        this.loadDonations();
+      },
+      error: (error: Error) => { this.restockError.set(error.message || 'No se pudo reponer el alimento.'); this.restockSaving.set(false); },
+    });
   }
 
   editDonation(donation: DonorManagementDonation): void {
@@ -501,11 +554,15 @@ export class DonorPage {
   setDonationSearch(event: Event): void { this.donationSearch.set((event.target as HTMLInputElement).value); }
   setDonationFilter(filter: DonationStatusFilter): void { this.donationStatusFilter.set(filter); }
   donationCount(filter: DonationStatusFilter): number {
-    if (filter === 'all') return this.donations().length;
-    if (filter === 'available') return this.donations().filter((donation) => donation.status === 'available' && donation.isVisible).length;
-    if (filter === 'hidden') return this.donations().filter((donation) => !donation.isVisible).length;
-    if (filter === 'reserved') return this.donations().filter((donation) => ['requested', 'reserved', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status)).length;
-    return this.donations().filter((donation) => ['delivered', 'completed', 'expired', 'cancelled'].includes(donation.status)).length;
+    return this.donations().filter((donation) => {
+      const stock = donation.availableQuantity > 0;
+      const archived = ['expired', 'cancelled'].includes(donation.status);
+      if (filter === 'all') return !archived && (stock || donation.reservedQuantity > 0);
+      if (filter === 'available') return !archived && stock && donation.isVisible;
+      if (filter === 'hidden') return !archived && stock && !donation.isVisible;
+      if (filter === 'reserved') return donation.reservedQuantity > 0;
+      return archived || (!stock && donation.reservedQuantity === 0);
+    }).length;
   }
 
   donationTone(category: string): string {
@@ -523,10 +580,20 @@ export class DonorPage {
     const unitLabels: Record<string, string> = {
       kg: 'kg', g: 'g', lb: 'lb', unit: 'unidades', portion: 'porciones', box: 'cajas', package: 'paquetes',
     };
-    const amount = `${donation.quantity} ${unitLabels[donation.unit] ?? donation.unit}`;
-    if (['delivered', 'completed'].includes(donation.status)) {
+    const unit = unitLabels[donation.unit] ?? donation.unit;
+    const amount = `${donation.quantity} ${unit}`;
+    if (donation.status === 'expired') return `${donation.availableQuantity} ${unit} · Vencida`;
+    if (donation.status === 'cancelled') return `${amount} · Cancelada`;
+    if (donation.availableQuantity > 0) {
+      const available = `${donation.availableQuantity} ${unit} disponibles`;
+      const reserved = donation.reservedQuantity > 0 ? ` · ${donation.reservedQuantity} reservadas` : '';
+      const delivered = donation.deliveredQuantity > 0 ? ` · ${donation.deliveredQuantity} entregadas` : '';
+      return `${available}${reserved}${delivered} · ${this.donationTiming(donation.expiresAt)}`;
+    }
+    if (donation.reservedQuantity > 0) return `Sin stock disponible · ${donation.reservedQuantity} ${unit} reservadas`;
+    if (['delivered', 'completed'].includes(donation.status) || donation.deliveredQuantity > 0) {
       const date = donation.deliveredAt ? new Intl.DateTimeFormat('es-DO', { day: 'numeric', month: 'short' }).format(new Date(donation.deliveredAt)) : '';
-      return `${amount} · Entregada${date ? ` el ${date}` : ''}`;
+      return `${donation.deliveredQuantity || donation.quantity} ${unit} entregadas${date ? ` · última entrega ${date}` : ''}`;
     }
     if (donation.status === 'reserved' || ['requested', 'pickup_in_progress', 'picked_up', 'in_pickup', 'in_delivery'].includes(donation.status)) {
       return `${amount} · ${this.pickupTime(donation.pickupStartsAt, donation.pickupEndsAt)}`;
