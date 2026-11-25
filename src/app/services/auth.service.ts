@@ -741,12 +741,20 @@ export class AuthService {
     return from((async () => {
       const { data: { user }, error: userError } = await this.supabase.auth.getUser();
       if (userError || !user) throw userError ?? new Error('Inicia sesión para ver alimentos disponibles.');
-      const { data, error } = await this.supabase.from('donations')
+      const [{ data, error }, { data: requestRows, error: requestsError }] = await Promise.all([
+        this.supabase.from('donations')
         .select('id, food_name, quantity, available_quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, address, city, organizations!inner(id, name, phone, email), food_categories(name)')
-        .eq('status', 'available').gt('available_quantity', 0).gt('expires_at', new Date().toISOString()).order('expires_at');
+        .eq('status', 'available').eq('is_visible', true).gt('available_quantity', 0)
+        .gt('expires_at', new Date().toISOString()).order('expires_at'),
+        this.supabase.from('individual_aid_requests').select('donation_id, status')
+          .eq('person_id', user.id).not('donation_id', 'is', null).neq('status', 'rejected'),
+      ]);
       if (error) throw error;
+      if (requestsError) throw requestsError;
+      const alreadyRequested = new Set((requestRows ?? []).map((request) => request.donation_id).filter((id): id is string => Boolean(id)));
       const needle = city.trim().toLocaleLowerCase();
-      return (data ?? []).filter((item) => !needle || String(item.city ?? '').toLocaleLowerCase().includes(needle)).map((item) => {
+      return (data ?? []).filter((item) => !alreadyRequested.has(item.id)
+        && (!needle || String(item.city ?? '').toLocaleLowerCase().includes(needle))).map((item) => {
         const org = item.organizations as unknown as Record<string, string>;
         const category = item.food_categories as unknown as Record<string, string> | null;
         return { id: item.id, organizationId: org['id'], organizationName: org['name'], foodName: item.food_name,
@@ -973,7 +981,9 @@ export class AuthService {
 
       type CategoryRelation = { name: string } | { name: string }[] | null;
       const categoryName = (relation: CategoryRelation): string => Array.isArray(relation) ? relation[0]?.name ?? 'Otros' : relation?.name ?? 'Otros';
-      const donations: BeneficiaryDonation[] = (donationsResult.data ?? []).map((row) => ({
+      const requestedDonationIds = new Set((requestResult.data ?? []).map((request) => request.donation_id));
+      const donations: BeneficiaryDonation[] = (donationsResult.data ?? [])
+        .filter((row) => !requestedDonationIds.has(row.id)).map((row) => ({
         id: row.id, createdAt: row.created_at, foodName: row.food_name, categoryName: categoryName(row.food_categories as CategoryRelation),
         imageUrl: row.image_path ? this.supabase.storage.from('foodshare-donations').getPublicUrl(row.image_path).data.publicUrl : null,
         quantity: Number(row.available_quantity), unit: row.unit, expiresAt: row.expires_at,

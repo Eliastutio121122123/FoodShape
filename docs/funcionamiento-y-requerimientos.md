@@ -2,6 +2,13 @@
 
 **Estado revisado:** 25 de noviembre de 2026.
 
+## Actualización: ofertas ya solicitadas
+
+- El mercado de organizaciones beneficiarias excluye las publicaciones para las que la organización autenticada ya tiene una solicitud, cualquiera que sea su estado. Así no se vuelve a abrir una acción que la restricción única `donation_requests(donation_id, beneficiary_organization_id)` no permitiría repetir. La oferta puede seguir apareciendo a otras organizaciones mientras conserve stock visible.
+- El mercado de personas necesitadas excluye las ofertas para las que esa persona tiene una solicitud de ración pendiente o aprobada. Si la organización rechaza la solicitud, la oferta puede volver a aparecer si todavía está visible, vigente y tiene stock. La selección se filtra por `person_id` de la sesión actual.
+- La exclusión es por cuenta y publicación; no oculta la donación a otros beneficiarios/personas ni cambia las cantidades del inventario. La solicitud personal de ración aún no reserva cantidades ni crea una entrega de inventario.
+- No se agregaron tablas, rutas ni migraciones; se reutilizan `donation_requests`, `individual_aid_requests`, `loadBeneficiaryDashboard()` y `loadPersonalFoodOffers()`.
+
 ## Actualización: inventario y reposición de donaciones
 
 - El inventario de cada publicación se divide en `available_quantity` (disponible), `reserved_quantity` (aceptado y pendiente de entrega) y `delivered_quantity` (recepción confirmada). `quantity` conserva la cantidad total publicada para esa tanda.
