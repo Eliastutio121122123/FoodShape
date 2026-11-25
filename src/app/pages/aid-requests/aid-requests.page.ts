@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService, PersonalAidRequest } from '../../services/auth.service';
@@ -13,6 +13,11 @@ export class AidRequestsPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   readonly requests = signal<PersonalAidRequest[]>([]);
+  readonly statusFilter = signal<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  readonly visibleRequests = computed(() => {
+    const filter = this.statusFilter();
+    return this.requests().filter((item) => filter === 'all' || item.status === filter);
+  });
   readonly dates = signal<Record<string, string>>({});
   readonly loading = signal(true);
   readonly error = signal('');
@@ -35,6 +40,10 @@ export class AidRequestsPage {
       error: (reason: Error) => { this.error.set(reason.message || 'No se pudieron cargar las solicitudes.'); this.loading.set(false); },
     });
   }
+  countFor(status: 'all' | 'pending' | 'approved' | 'rejected'): number {
+    return status === 'all' ? this.requests().length : this.requests().filter((item) => item.status === status).length;
+  }
+  setFilter(status: 'all' | 'pending' | 'approved' | 'rejected'): void { this.statusFilter.set(status); }
   setDate(id: string, event: Event): void {
     this.dates.update((items) => ({ ...items, [id]: (event.target as HTMLInputElement).value }));
   }
@@ -51,7 +60,11 @@ export class AidRequestsPage {
     this.auth.reviewOrganizationAidRequest(item.id, status, scheduledAt,
       status === 'approved' && scheduledAt ? `Ración coordinada para ${new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(scheduledAt))}.` : '')
       .subscribe({
-        next: () => { this.processing.set(null); this.feedback.set(status === 'approved' ? 'Solicitud aprobada y actualizada.' : 'Solicitud marcada como no aprobada.'); this.reload(); },
+        next: () => {
+          this.processing.set(null);
+          this.feedback.set(status === 'approved' ? 'Solicitud aprobada y actualizada.' : 'Solicitud marcada como no aprobada.');
+          this.reload();
+        },
         error: (reason: Error) => { this.processing.set(null); this.error.set(reason.message || 'No se pudo actualizar la solicitud.'); },
       });
   }

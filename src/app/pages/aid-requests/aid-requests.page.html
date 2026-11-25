@@ -1,10 +1,79 @@
-<main class="inbox-shell"><header><a [routerLink]="['/app', role()]">← Volver al panel</a><a class="chat-inbox-link" routerLink="/app/chat">Mensajes</a><img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" /></header><section class="inbox-content"><span class="eyebrow">PANEL DE {{ nameForRole() | uppercase }}</span><h1>Solicitudes de apoyo personal</h1><p>Responde a solicitudes para unirse o coordina la fecha de entrega de una ración.</p>
-  @if (feedback()) { <p class="success" role="status">{{ feedback() }}</p> } @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-  @if (loading()) { <div class="empty">Cargando solicitudes…</div> }
-  @else if (requests().length) { @for (item of requests(); track item.id) { <article class="request-card"><div class="request-heading"><div><span class="tag">{{ item.requestType === 'membership' ? 'Unirse a la organización' : 'Solicitar ración' }}</span><h2>{{ item.organizationName }}</h2><small>Recibida {{ formatDate(item.createdAt) }}</small></div><b [class.approved]="item.status === 'approved'" [class.rejected]="item.status === 'rejected'">{{ item.status === 'pending' ? 'Pendiente' : item.status === 'approved' ? 'Aprobada' : 'No aprobada' }}</b></div>
-    @if (item.message) { <p class="message">{{ item.message }}</p> }<p class="contact"><a [href]="'tel:' + item.phone">Llamar a {{ item.organizationName }} · {{ item.phone }}</a>@if (item.personId) { <button type="button" class="chat-link" [disabled]="openingChatId() === item.id" (click)="openChat(item)">{{ openingChatId() === item.id ? 'Abriendo chat…' : 'Abrir chat' }}</button> }</p>
-    @if (item.requestType === 'ration' && item.status === 'pending') { <label class="schedule">Fecha y hora para recibir la ración <input type="datetime-local" [value]="dates()[item.id] || ''" (change)="setDate(item.id, $event)" /></label> }
-    @if (item.status === 'pending') { <div class="actions"><button type="button" class="approve" [disabled]="processing() === item.id" (click)="review(item, 'approved')">{{ processing() === item.id ? 'Guardando…' : item.requestType === 'ration' ? 'Aprobar y coordinar' : 'Aprobar solicitud' }}</button><button type="button" class="reject" [disabled]="processing() === item.id" (click)="review(item, 'rejected')">No aprobar</button></div> }
-  </article> } }
-  @else { <div class="empty">No tienes solicitudes personales pendientes.</div> }
-</section></main>
+<main class="inbox-shell">
+  <header>
+    <a [routerLink]="['/app', role()]">← Volver al panel</a>
+    <a class="chat-inbox-link" routerLink="/app/chat">Mensajes</a>
+    <img class="brand-logo" src="assets/foodshare-logo.png" alt="FoodShare" />
+  </header>
+
+  <section class="inbox-content">
+    <span class="eyebrow">PANEL DE {{ nameForRole() | uppercase }}</span>
+    <h1>Solicitudes de apoyo personal</h1>
+    <p>Responde a solicitudes para unirse o coordina la fecha de entrega de una ración.</p>
+
+    @if (feedback()) {
+      <div class="success" role="status">
+        <span>{{ feedback() }}</span>
+        @if (countFor('approved') > 0) {
+          <button type="button" (click)="setFilter('approved')">Ver aprobadas ({{ countFor('approved') }})</button>
+        }
+      </div>
+    }
+    @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+
+    @if (loading()) {
+      <div class="empty">Cargando solicitudes…</div>
+    } @else {
+      <nav class="request-filters" aria-label="Filtrar solicitudes">
+        <button type="button" [class.active]="statusFilter() === 'all'" [attr.aria-pressed]="statusFilter() === 'all'" (click)="setFilter('all')">Todas <span>{{ countFor('all') }}</span></button>
+        <button type="button" [class.active]="statusFilter() === 'pending'" [attr.aria-pressed]="statusFilter() === 'pending'" (click)="setFilter('pending')">Pendientes <span>{{ countFor('pending') }}</span></button>
+        <button type="button" [class.active]="statusFilter() === 'approved'" [attr.aria-pressed]="statusFilter() === 'approved'" (click)="setFilter('approved')">Aprobadas <span>{{ countFor('approved') }}</span></button>
+        <button type="button" [class.active]="statusFilter() === 'rejected'" [attr.aria-pressed]="statusFilter() === 'rejected'" (click)="setFilter('rejected')">No aprobadas <span>{{ countFor('rejected') }}</span></button>
+      </nav>
+
+      @if (visibleRequests().length) {
+        <h2 class="list-heading">{{ statusFilter() === 'approved' ? 'Solicitudes aprobadas' : statusFilter() === 'pending' ? 'Solicitudes pendientes' : statusFilter() === 'rejected' ? 'Solicitudes no aprobadas' : 'Todas las solicitudes' }}</h2>
+        @for (item of visibleRequests(); track item.id) {
+          <article class="request-card">
+            <div class="request-heading">
+              <div>
+                <span class="tag">{{ item.requestType === 'membership' ? 'Unirse a la organización' : 'Solicitar ración' }}</span>
+                <h2>{{ item.organizationName }}</h2>
+                <small>Recibida {{ formatDate(item.createdAt) }}</small>
+              </div>
+              <b [class.approved]="item.status === 'approved'" [class.rejected]="item.status === 'rejected'">{{ item.status === 'pending' ? 'Pendiente' : item.status === 'approved' ? 'Aprobada' : 'No aprobada' }}</b>
+            </div>
+
+            @if (item.requestType === 'ration' && (item.foodName || item.quantity)) {
+              <p class="food-detail">Ración: <strong>{{ item.foodName || 'Alimentos' }}</strong>@if (item.quantity) { · {{ item.quantity }} {{ item.unit || 'unidades' }} }</p>
+            }
+            @if (item.message) { <p class="message">{{ item.message }}</p> }
+
+            @if (item.status === 'approved') {
+              <div class="approved-next-step">
+                <strong>{{ item.requestType === 'ration' ? 'Ración aprobada' : 'Solicitud aprobada' }}</strong>
+                <span>{{ item.requestType === 'ration' ? (item.scheduledAt ? 'Entrega coordinada para ' + formatDate(item.scheduledAt) : 'Contacta a la organización para coordinar la entrega.') : 'Puedes comunicarte con la organización para continuar.' }}</span>
+              </div>
+            }
+
+            <p class="contact">
+              @if (item.phone) { <a [href]="'tel:' + item.phone">Llamar a {{ item.organizationName }} · {{ item.phone }}</a> }
+              @if (item.personId) { <button type="button" class="chat-link" [disabled]="openingChatId() === item.id" (click)="openChat(item)">{{ openingChatId() === item.id ? 'Abriendo chat…' : 'Abrir chat' }}</button> }
+            </p>
+
+            @if (item.requestType === 'ration' && item.status === 'pending') {
+              <label class="schedule">Fecha y hora para recibir la ración <input type="datetime-local" [value]="dates()[item.id] || ''" (change)="setDate(item.id, $event)" /></label>
+            }
+            @if (item.status === 'pending') {
+              <div class="actions">
+                <button type="button" class="approve" [disabled]="processing() === item.id" (click)="review(item, 'approved')">{{ processing() === item.id ? 'Guardando…' : item.requestType === 'ration' ? 'Aprobar y coordinar' : 'Aprobar solicitud' }}</button>
+                <button type="button" class="reject" [disabled]="processing() === item.id" (click)="review(item, 'rejected')">No aprobar</button>
+              </div>
+            }
+          </article>
+        }
+      } @else {
+        <div class="empty">{{ statusFilter() === 'approved' ? 'Todavía no hay solicitudes aprobadas.' : statusFilter() === 'pending' ? 'No tienes solicitudes pendientes.' : statusFilter() === 'rejected' ? 'No hay solicitudes no aprobadas.' : 'Aún no tienes solicitudes de apoyo personal.' }}</div>
+      }
+    }
+  </section>
+</main>

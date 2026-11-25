@@ -2,6 +2,14 @@
 
 **Estado revisado:** 25 de noviembre de 2026.
 
+## Cambio reciente: solicitudes personales aprobadas
+
+- La bandeja `/app/aid-requests` ahora permite separar **Todas**, **Pendientes**, **Aprobadas** y **No aprobadas**, con el conteo actualizado desde las solicitudes que carga Supabase.
+- Al terminar una aprobación se conserva la confirmación y aparece el acceso **Ver aprobadas** para abrir de inmediato la sección correspondiente, sin impedir que se continúen revisando otras solicitudes pendientes.
+- En las solicitudes aprobadas se muestra el alimento y la cantidad cuando la solicitud corresponde a una ración, además de la fecha coordinada cuando existe; para membresías se indica el siguiente paso de contacto.
+- No se añadieron rutas, tablas ni migraciones: se reutilizan `individual_aid_requests`, `loadOrganizationAidRequests()` y el estado existente `approved`.
+- El acceso a la bandeja sigue limitado a donantes y organizaciones beneficiarias; los datos permanecen sujetos a las consultas y políticas RLS existentes.
+
 > **Para qué sirve este documento:** es el inventario funcional y la guía de seguimiento de FoodShare. Reúne las 30 funcionalidades acordadas, explica qué está implementado y qué falta, y registra las validaciones pendientes en Supabase. Actualízalo cuando cambie el sistema para que el equipo tenga una referencia compartida y no confunda pantallas, maquetas o tablas con funciones terminadas.
 
 ## Resumen de cambios recientes: donantes y beneficiarias
@@ -29,7 +37,7 @@ Esta sección reúne las funciones incorporadas recientemente y reemplaza las de
 ## Portal de apoyo alimentario para personas
 
 - Se incorporó el rol `person`, con registro personal, perfil activo y panel protegido en `/app/person`. El panel permite consultar organizaciones aprobadas por ciudad, revisar alimentos disponibles, contactar a las organizaciones, enviar solicitudes para unirse o pedir una ración y consultar el estado de esas solicitudes.
-- Donantes y organizaciones beneficiarias pueden abrir `/app/aid-requests` para revisar solicitudes personales pendientes, aprobarlas o rechazarlas; al aprobar una solicitud de ración, pueden coordinar fecha y hora. El perfil administrativo permite filtrar el rol de persona.
+- Donantes y organizaciones beneficiarias pueden abrir `/app/aid-requests` para revisar solicitudes personales pendientes, aprobadas y no aprobadas, aprobarlas o rechazarlas; al aprobar una solicitud de ración, pueden coordinar fecha y hora. Los filtros muestran conteos, la confirmación ofrece un acceso directo a las aprobadas y las tarjetas aprobadas explican el estado y próximo paso. El perfil administrativo permite filtrar el rol de persona.
 - La migración `20261117090000_individual_beneficiaries.sql` define el rol, `individual_aid_requests`, sus políticas RLS y la notificación a la organización; `20261117100000_fix_individual_aid_rls.sql` contiene correcciones iniciales. El historial remoto consultado registra las migraciones correctivas `20261117220833_fix_individual_aid_profile_rls_recursion` y `20261117221216_break_aid_donation_rls_cycle`. La tabla y el flujo de solicitudes están presentes en el proyecto; al sincronizar otro entorno, aplicar las migraciones locales en orden.
 - **Límite funcional:** aprobar una solicitud individual asociada a una donación no descuenta ni reserva automáticamente la cantidad de esa publicación. La coordinación de existencias para solicitudes personales debe validarse antes de usarla para comprometer inventario.
 
