@@ -1,2 +1,16 @@
 :host{display:block;width:100%;min-width:0}.organization-map-canvas{width:100%;height:min(58vh,520px);min-height:340px;border:1px solid #e1e9df;border-radius:14px;background:#edf3e9;z-index:0}.organization-map-canvas[data-map-error=true]{display:none}
 @media(max-width:600px){.organization-map-canvas{height:58vh;min-height:300px;max-height:440px;border-radius:11px}}
+
+:host ::ng-deep .organization-map-div-icon{border:0;background:transparent}
+:host ::ng-deep .organization-map-pin{width:30px;height:30px;display:grid;place-items:center;border:2px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 3px 9px #183b2a55;color:#fff;font-size:16px;font-weight:800}
+:host ::ng-deep .organization-map-pin>span{transform:rotate(45deg)}
+:host ::ng-deep .organization-map-pin--donor{background:#21804c}
+:host ::ng-deep .organization-map-pin--beneficiary{background:#ed8a35}
+:host ::ng-deep .organization-map-pin--approximate{opacity:.7}
+:host ::ng-deep .leaflet-popup-content-wrapper{border:1px solid #e1e9df;border-radius:13px;box-shadow:0 8px 26px #173c2b24}
+:host ::ng-deep .leaflet-popup-content{margin:12px 15px;line-height:1.45}
+:host ::ng-deep .organization-map-popup{display:grid;gap:5px;min-width:160px;color:#244a33;font-family:inherit}
+:host ::ng-deep .organization-map-popup__type{width:max-content;max-width:100%;padding:3px 8px;border-radius:20px;background:#eef5eb;color:#557263;font-size:10px}
+:host ::ng-deep .organization-map-popup strong{font-size:14px;overflow-wrap:anywhere}
+:host ::ng-deep .organization-map-popup__category,:host ::ng-deep .organization-map-popup__address{color:#66786d;font-size:11px;overflow-wrap:anywhere}
+:host ::ng-deep .organization-map-popup__note{margin:2px 0 0;color:#9b6d25;font-size:10px}

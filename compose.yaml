@@ -7,7 +7,9 @@ services:
       - "8100:8100"
     volumes:
       - .:/app
-      - node_modules_supabase:/app/node_modules
+      # Use a fresh dependency volume so Docker does not keep an older
+      # node_modules tree after dependencies are added to package-lock.json.
+      - node_modules_foodshare_v2:/app/node_modules
     environment:
       CHOKIDAR_USEPOLLING: "true"
       # These values come from FoodShape/.env (copy .env.example first).
@@ -16,4 +18,4 @@ services:
     command: sh -c "node scripts/write-runtime-config.mjs && npm start -- --host 0.0.0.0 --port 8100 --poll 1000"
 
 volumes:
-  node_modules_supabase:
+  node_modules_foodshare_v2:
