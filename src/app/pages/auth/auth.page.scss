@@ -18,7 +18,13 @@
 .auth-card input.invalid,.auth-card select.invalid{border-color:#d95b4b;background:#fff8f6}.field-error{display:block;margin-top:5px;color:#c84f41!important;font-size:11px!important;font-weight:500;line-height:1.35;text-align:left!important}.agreement-error{margin:6px 0 0 25px}.auth-card label span{color:#8c978e;font-weight:400}
 
 .success-message{padding:12px 14px;border:1px solid #b8dcc1;border-radius:10px;background:#f1faf3;color:#216b3c!important;font-size:13px;font-weight:600}.login-error{padding:10px 12px;border:1px solid #f0c2bd;border-radius:10px;background:#fff8f6}
-.google-button{display:flex;justify-content:center;min-height:40px;margin-top:14px}.google-error{text-align:center!important}
+.divider{display:flex;align-items:center;gap:14px;margin:20px 0 4px;color:#87958b;font-size:12px}.divider::before,.divider::after{content:"";height:1px;flex:1;background:#e9e4da}
+.google-button{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:52px;margin-top:14px;padding:0 18px;border:1px solid #dcded8;border-radius:12px;background:#fff;color:#263a30;font:inherit;font-size:14px;font-weight:650;cursor:pointer;transition:border-color .16s ease,background-color .16s ease,box-shadow .16s ease}
+.google-button:hover:not(:disabled){border-color:#a8c8b1;background:#fbfdfb;box-shadow:0 3px 12px #173b2b10}
+.google-button:focus-visible{outline:3px solid #f6892f;outline-offset:3px}
+.google-button:disabled{cursor:wait;opacity:.72}
+.google-mark{width:19px;height:19px;flex:none}
+.google-error{text-align:center!important}
 
 .password-input-wrap {
   position: relative;

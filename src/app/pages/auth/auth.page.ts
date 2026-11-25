@@ -33,11 +33,13 @@ export class AuthPage {
   readonly submitted = signal(false);
   readonly loginError = signal('');
   readonly googleError = signal('');
+  readonly googleLoading = signal(false);
   readonly registrationMessage = signal('');
   readonly registrationError = signal('');
   readonly organizationCategories = signal<import('../../services/auth.service').OrganizationCategory[]>([]);
   readonly catalogError = signal('');
   readonly showPassword = signal(false);
+  private handlingAuthCallback = false;
 
   togglePasswordVisibility(): void {
     this.showPassword.update((visible) => !visible);
@@ -129,17 +131,53 @@ export class AuthPage {
   }
 
   loginWithGoogle(): void {
+    if (this.googleLoading()) return;
     this.googleError.set('');
-    void this.auth.loginWithGoogle().catch((error: Error) => this.googleError.set(error.message || 'No se pudo iniciar sesion con Google.'));
+    this.googleLoading.set(true);
+    void this.auth.loginWithGoogle().catch((error: Error) => {
+      this.googleLoading.set(false);
+      const message = error.message || '';
+      this.googleError.set(/provider.*not enabled|unsupported provider/i.test(message)
+        ? 'Google todavía no está habilitado en la configuración de acceso de Supabase.'
+        : message || 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.');
+    });
   }
 
   private handleAuthCallback(): void {
-    if (!window.location.hash.includes('access_token') && !window.location.search.includes('code=')) return;
-    void this.auth.refreshSession().then((session) => {
-      if (session) void this.router.navigateByUrl(`/app/${session.role}`);
-      else this.googleError.set('La cuenta de Google todavía no tiene un perfil activo en FoodShare.');
-      window.history.replaceState({}, document.title, window.location.pathname);
+    const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const providerError = search.get('error_description') ?? hash.get('error_description');
+    const callbackPresent = hash.has('access_token') || search.has('code');
+    if (providerError) {
+      this.googleError.set(`Google no pudo completar el acceso: ${providerError}`);
+      this.googleLoading.set(false);
+      this.clearAuthCallbackUrl();
+      return;
+    }
+    if (!callbackPresent) return;
+    if (this.handlingAuthCallback) return;
+    this.handlingAuthCallback = true;
+    this.googleLoading.set(true);
+    void this.auth.refreshSession().then(async (session) => {
+      this.clearAuthCallbackUrl();
+      if (session) {
+        await this.router.navigateByUrl(`/app/${session.role}`);
+      } else {
+        await this.auth.signOut().catch(() => undefined);
+        this.googleError.set('Esta cuenta de Google no tiene un perfil FoodShare activo. Inicia sesión con tu cuenta registrada o pide al administrador que revise tu perfil.');
+        this.googleLoading.set(false);
+        this.handlingAuthCallback = false;
+      }
+    }).catch((error: Error) => {
+      this.clearAuthCallbackUrl();
+      this.googleError.set(error.message || 'No se pudo verificar tu perfil en FoodShare. Inténtalo de nuevo.');
+      this.googleLoading.set(false);
+      this.handlingAuthCallback = false;
     });
+  }
+
+  private clearAuthCallbackUrl(): void {
+    window.history.replaceState({}, document.title, window.location.pathname);
   }
 
   submitRegistration(role: RegistrationRole): void {

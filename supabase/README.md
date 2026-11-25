@@ -9,7 +9,7 @@ La aplicación usa Supabase Auth para correo/contraseña y Google, y PostgreSQL 
 3. Aplica también las migraciones posteriores de `migrations/` en orden para habilitar los cambios recientes, incluida `20261117090000_individual_beneficiaries.sql` para cuentas personales que solicitan alimentos. Si el proyecto ya está vinculado con Supabase CLI, desde la raíz del repositorio ejecuta `npx supabase db push`.
 4. Copia `.env.example` a `.env` y sustituye `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` con esos valores.
 5. Configura Authentication → URL Configuration: Site URL `http://localhost:8100` y Redirect URLs `http://localhost:8100/login` y `http://127.0.0.1:8100/login`.
-6. Para Google, habilita el proveedor Google en Authentication → Sign In / Providers y sigue el callback URI que muestra Supabase en la consola OAuth de Google. No necesitas un endpoint Google propio en FoodShare.
+6. Para habilitar “Continuar con Google”, crea un cliente OAuth de tipo aplicación web en Google Cloud. En Google, agrega como URI de redirección autorizada el callback que muestra Supabase (normalmente `https://<project-ref>.supabase.co/auth/v1/callback`). Copia el Client ID y Client Secret en Supabase → Authentication → Sign In / Providers → Google y activa el proveedor. En Supabase → Authentication → URL Configuration, agrega también la dirección `/login` de cada entorno que uses (local y producción) a Redirect URLs. No guardes el Client Secret en FoodShare ni en GitHub; el flujo usa Supabase Auth y vuelve a `/login`, donde se consulta el perfil activo para abrir el panel con su rol.
 7. Arranca la aplicación con `docker compose up --build`. Abre `http://localhost:8100`.
 
 ## Conectar este repositorio con la integración GitHub de Supabase
