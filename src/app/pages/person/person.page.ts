@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService, CommunityOrganization, PersonalAidRequest, PersonalFoodOffer } from '../../services/auth.service';
 
 type PersonSection = 'offers' | 'organizations' | 'join' | 'rations';
@@ -8,15 +8,17 @@ type PersonSection = 'offers' | 'organizations' | 'join' | 'rations';
   selector: 'app-person',
   templateUrl: './person.page.html',
   styleUrls: ['./person.page.scss'],
-  imports: [RouterLink],
+  imports: [RouterLink, RouterLinkActive],
 })
 export class PersonPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   readonly section = signal<PersonSection>('offers');
+  readonly menuOpen = signal(false);
   readonly organizations = signal<CommunityOrganization[]>([]);
   readonly selectedOrganization = signal<CommunityOrganization | null>(null);
   readonly foodOffers = signal<PersonalFoodOffer[]>([]);
+  readonly failedOfferImages = signal<Set<string>>(new Set());
   readonly requests = signal<PersonalAidRequest[]>([]);
   readonly fullName = signal('');
   readonly cityFilter = signal('');
@@ -33,6 +35,8 @@ export class PersonPage {
   readonly rationRequests = computed(() => this.requests().filter((item) => item.requestType === 'ration'));
   readonly upcomingRations = computed(() => this.rationRequests().filter((item) => item.status === 'approved' && item.scheduledAt));
   readonly name = computed(() => this.fullName() || this.auth.session()?.email?.split('@')[0] || 'Bienvenida');
+  readonly initials = computed(() => this.name().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'P');
+  readonly avatarUrl = this.auth.currentAvatarUrl;
 
   constructor() {
     this.auth.loadAccountProfile().subscribe({ next: (profile) => this.fullName.set(profile.fullName), error: () => {} });
@@ -57,6 +61,9 @@ export class PersonPage {
   }
 
   setCity(event: Event): void { this.cityFilter.set((event.target as HTMLInputElement).value); }
+  navigateTo(section: PersonSection): void { this.section.set(section); this.menuOpen.set(false); }
+  toggleMenu(): void { this.menuOpen.update((open) => !open); }
+  handleOfferImageError(id: string): void { this.failedOfferImages.update((current) => new Set(current).add(id)); }
   async openChat(organizationId: string): Promise<void> {
     if (this.chatOpening()) return;
     this.chatOpening.set(organizationId);

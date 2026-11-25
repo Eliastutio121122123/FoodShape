@@ -235,7 +235,7 @@ export interface PersonalAidRequest {
 export interface PersonalFoodOffer {
   id: string; organizationId: string; organizationName: string; foodName: string; quantity: number; unit: string;
   categoryName: string; expiresAt: string; pickupStartsAt: string; pickupEndsAt: string;
-  address: string; city: string; phone: string; email: string;
+  address: string; city: string; phone: string; email: string; imageUrl: string | null;
 }
 export interface DonorDonationCreateOptions {
   organizationId: string;
@@ -743,7 +743,7 @@ export class AuthService {
       if (userError || !user) throw userError ?? new Error('Inicia sesión para ver alimentos disponibles.');
       const [{ data, error }, { data: requestRows, error: requestsError }] = await Promise.all([
         this.supabase.from('donations')
-        .select('id, food_name, quantity, available_quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, address, city, organizations!inner(id, name, phone, email), food_categories(name)')
+        .select('id, food_name, quantity, available_quantity, unit, expires_at, pickup_starts_at, pickup_ends_at, address, city, image_path, organizations!inner(id, name, phone, email), food_categories(name)')
         .eq('status', 'available').eq('is_visible', true).gt('available_quantity', 0)
         .gt('expires_at', new Date().toISOString()).order('expires_at'),
         this.supabase.from('individual_aid_requests').select('donation_id, status')
@@ -760,7 +760,8 @@ export class AuthService {
         return { id: item.id, organizationId: org['id'], organizationName: org['name'], foodName: item.food_name,
           quantity: Number(item.available_quantity), unit: item.unit, categoryName: category?.['name'] ?? 'Alimentos',
           expiresAt: item.expires_at, pickupStartsAt: item.pickup_starts_at, pickupEndsAt: item.pickup_ends_at,
-          address: item.address, city: item.city, phone: org['phone'], email: org['email'] };
+          address: item.address, city: item.city, phone: org['phone'], email: org['email'],
+          imageUrl: item.image_path ? this.supabase.storage.from('foodshare-donations').getPublicUrl(item.image_path).data.publicUrl : null };
       });
     })());
   }
