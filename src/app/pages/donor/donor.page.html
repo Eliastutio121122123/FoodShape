@@ -14,7 +14,7 @@
         <button [class.active]="section() === 'dashboard'" (click)="select('dashboard')"><i>⌂</i> Inicio</button>
         <button [class.active]="section() === 'donations'" (click)="select('donations')"><i>▣</i> Mis donaciones</button>
         <button [class.active]="section() === 'requests'" (click)="select('requests')"><i>◫</i> Solicitudes <b>{{ pendingRequestCount() }}</b></button>
-        <button routerLink="/app/aid-requests"><i>♡</i> Solicitudes de apoyo personal</button>
+        <button type="button" (click)="openPersonalAidRequests()"><i>♡</i> Solicitudes de apoyo personal</button>
         <button [class.active]="section() === 'history'" (click)="select('history')"><i>◷</i> Historial</button>
       </nav>
       <div class="sidebar-card"><span>♧</span><strong>¿Necesitas ayuda?</strong><p>Consulta cómo publicar y coordinar tus donaciones.</p><button>Ver guía →</button></div>

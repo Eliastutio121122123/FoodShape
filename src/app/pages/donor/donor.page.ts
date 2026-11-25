@@ -121,6 +121,11 @@ export class DonorPage {
     }
   }
 
+  openPersonalAidRequests(): void {
+    this.menuOpen.set(false);
+    void this.router.navigateByUrl('/app/aid-requests');
+  }
+
   loadDashboard(): void {
     this.dashboardLoading.set(true);
     this.dashboardError.set('');
