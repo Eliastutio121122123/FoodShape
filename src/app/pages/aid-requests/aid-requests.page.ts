@@ -1,13 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
+import { IonContent } from '@ionic/angular';
 import { AuthService, PersonalAidRequest } from '../../services/auth.service';
 
 @Component({
   selector: 'app-aid-requests',
   templateUrl: './aid-requests.page.html',
   styleUrls: ['./aid-requests.page.scss'],
-  imports: [RouterLink, UpperCasePipe],
+  imports: [IonContent, RouterLink, UpperCasePipe],
 })
 export class AidRequestsPage {
   private readonly auth = inject(AuthService);

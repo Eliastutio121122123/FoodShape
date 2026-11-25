@@ -1,4 +1,6 @@
 :host { display: block; min-height: 100vh; background: #f6f8f4; color: #254332; font-family: Inter, Arial, sans-serif; }
+ion-content { --background: #f6f8f4; }
+.inbox-shell { min-height: 100%; padding-bottom: 24px; box-sizing: border-box; }
 .inbox-shell header { height: 62px; padding: 0 max(18px, calc((100% - 1050px) / 2)); display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid #e5ebe2; }
 .inbox-shell header a { color: #26764a; font-size: 12px; font-weight: 700; text-decoration: none; }
 .inbox-shell header .brand-logo { order: 3; width: 128px; max-height: 40px; object-fit: contain; }

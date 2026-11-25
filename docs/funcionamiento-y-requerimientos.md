@@ -10,6 +10,7 @@
 - No se añadieron rutas, tablas ni migraciones: se reutilizan `individual_aid_requests`, `loadOrganizationAidRequests()` y el estado existente `approved`.
 - El acceso a la bandeja sigue limitado a donantes y organizaciones beneficiarias; los datos permanecen sujetos a las consultas y políticas RLS existentes.
 - Se corrigió el acceso desde el menú lateral del donante para navegar explícitamente a `/app/aid-requests` y cerrar el menú móvil al abrir la bandeja.
+- La bandeja ahora usa el contenedor de desplazamiento de Ionic (`ion-content`), para que las solicitudes y sus detalles inferiores puedan recorrerse verticalmente en escritorio y móvil.
 
 > **Para qué sirve este documento:** es el inventario funcional y la guía de seguimiento de FoodShare. Reúne las 30 funcionalidades acordadas, explica qué está implementado y qué falta, y registra las validaciones pendientes en Supabase. Actualízalo cuando cambie el sistema para que el equipo tenga una referencia compartida y no confunda pantallas, maquetas o tablas con funciones terminadas.
 
